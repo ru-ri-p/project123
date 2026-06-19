@@ -94,7 +94,7 @@ Cross-tenant access to another org's trace returns **403**.
 
 ### PII redaction & erasure (Week 6)
 
-PII is redacted before hashing and storage. Payloads are Fernet-encrypted with per-record keys.
+PII is redacted before hashing and storage. Payloads are encrypted with AES-256-GCM using per-record keys (AAD-bound to the record); erasure crypto-shreds the key.
 
 ```bash
 # Erasure crypto-shreds the target payload key and appends a signed erasure event

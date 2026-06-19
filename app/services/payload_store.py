@@ -1,34 +1,67 @@
-"""Encrypted payload storage with per-record keys (crypto-shredding — instructions §5)."""
+"""Encrypted payload storage with per-record keys (crypto-shredding — instructions §5).
+
+Content is encrypted with AES-256-GCM (CLAUDE.md rule 6): a fresh 256-bit key
+per record, a random 96-bit nonce, and Additional Authenticated Data (AAD) that
+binds the ciphertext to its own {enc_alg, org_id, payload_hash}. The AAD means a
+blob cannot be silently moved onto a different record or relabelled — GCM's
+integrity tag covers it. Erasure (crypto-shred) deletes the per-record key, after
+which the ciphertext is unrecoverable while the signed event chain stays intact.
+"""
 
 from __future__ import annotations
 
 import base64
 import json
+import os
 from datetime import UTC, datetime
 from typing import Any
 
-from cryptography.fernet import Fernet, InvalidToken
+from cryptography.exceptions import InvalidTag
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from sqlalchemy.orm import Session
 
+from app.crypto.algorithms import DEFAULT_CONTENT_ALGORITHM, is_supported_content
+from app.crypto.canonical import canonical_bytes
 from app.db.models import Payload, PayloadKey
+
+_NONCE_BYTES = 12  # 96-bit nonce, the standard size for AES-GCM
+_KEY_BITS = 256
 
 
 class PayloadShreddedError(LookupError):
-    """Raised when payload content was crypto-shredded and is unrecoverable."""
+    """Raised when payload content was crypto-shredded or is otherwise unreadable."""
 
 
-def _encrypt_content(content: dict[str, Any]) -> tuple[str, str]:
-    key = Fernet.generate_key()
-    blob = Fernet(key).encrypt(json.dumps(content, ensure_ascii=False).encode("utf-8"))
+def _aad(*, enc_alg: str, org_id: str, payload_hash: str) -> bytes:
+    """Authenticated context bound into the ciphertext (not encrypted, but tamper-evident).
+
+    Reconstructable at decrypt time from stored fields, so it must be deterministic.
+    """
+    return canonical_bytes(
+        {"alg": enc_alg, "org_id": org_id, "payload_hash": payload_hash}
+    )
+
+
+def _encrypt_content(content: dict[str, Any], *, aad: bytes) -> tuple[str, str]:
+    key = AESGCM.generate_key(bit_length=_KEY_BITS)
+    nonce = os.urandom(_NONCE_BYTES)
+    ciphertext = AESGCM(key).encrypt(
+        nonce, json.dumps(content, ensure_ascii=False).encode("utf-8"), aad
+    )
+    blob = nonce + ciphertext  # tag is appended to ciphertext by AESGCM
     return base64.b64encode(blob).decode("ascii"), base64.b64encode(key).decode("ascii")
 
 
-def _decrypt_content(encrypted_blob_b64: str, key_b64: str) -> dict[str, Any]:
+def _decrypt_content(encrypted_blob_b64: str, key_b64: str, *, aad: bytes) -> dict[str, Any]:
     key = base64.b64decode(key_b64.encode("ascii"))
     blob = base64.b64decode(encrypted_blob_b64.encode("ascii"))
+    nonce, ciphertext = blob[:_NONCE_BYTES], blob[_NONCE_BYTES:]
     try:
-        plaintext = Fernet(key).decrypt(blob)
-    except InvalidToken as exc:
+        plaintext = AESGCM(key).decrypt(nonce, ciphertext, aad)
+    except (InvalidTag, ValueError) as exc:
+        # Wrong/shredded key, tampered blob, mismatched AAD, or a malformed key
+        # (e.g. a record written under a different scheme) — all unreadable.
+        # Fail closed rather than raise out of the read path.
         msg = "payload decryption failed"
         raise PayloadShreddedError(msg) from exc
     data: dict[str, Any] = json.loads(plaintext.decode("utf-8"))
@@ -51,12 +84,15 @@ def store_encrypted_payload(
     if existing is not None:
         return
 
-    encrypted_blob, key_b64 = _encrypt_content(content)
+    enc_alg = DEFAULT_CONTENT_ALGORITHM
+    aad = _aad(enc_alg=enc_alg, org_id=org_id, payload_hash=payload_hash)
+    encrypted_blob, key_b64 = _encrypt_content(content, aad=aad)
     db.add(
         Payload(
             org_id=org_id,
             payload_hash=payload_hash,
             encrypted_blob=encrypted_blob,
+            enc_alg=enc_alg,
             pii_labels=pii_labels,
         )
     )
@@ -80,6 +116,9 @@ def read_payload_content(db: Session, org_id: str, payload_hash: str) -> dict[st
         return None
     if payload.erased_at is not None:
         return None
+    if not is_supported_content(payload.enc_alg):
+        # Unknown content-encryption suite — fail closed rather than guess.
+        return None
 
     key_row = (
         db.query(PayloadKey)
@@ -89,8 +128,9 @@ def read_payload_content(db: Session, org_id: str, payload_hash: str) -> dict[st
     if key_row is None:
         return None
 
+    aad = _aad(enc_alg=payload.enc_alg, org_id=org_id, payload_hash=payload_hash)
     try:
-        return _decrypt_content(payload.encrypted_blob, key_row.key_b64)
+        return _decrypt_content(payload.encrypted_blob, key_row.key_b64, aad=aad)
     except PayloadShreddedError:
         return None
 

@@ -10,7 +10,7 @@ from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstr
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.crypto.algorithms import DEFAULT_ALGORITHM
+from app.crypto.algorithms import DEFAULT_ALGORITHM, DEFAULT_CONTENT_ALGORITHM
 from app.db.base import Base
 
 EVENT_TYPES = (
@@ -165,6 +165,11 @@ class Payload(Base):
     payload_hash: Mapped[str] = mapped_column(Text, primary_key=True)
     org_id: Mapped[str] = mapped_column(Text, ForeignKey("orgs.id"), nullable=False, index=True)
     encrypted_blob: Mapped[str] = mapped_column(Text, nullable=False)
+    # Content-encryption suite for this blob; lets the read path dispatch and
+    # supports migrating the cipher without losing older records.
+    enc_alg: Mapped[str] = mapped_column(
+        Text, nullable=False, server_default=DEFAULT_CONTENT_ALGORITHM
+    )
     pii_labels: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
     erased_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(

@@ -26,3 +26,20 @@ SUPPORTED_ALGORITHMS: frozenset[str] = frozenset({ALG_SHA256_ED25519_V1})
 def is_supported(alg: str | None) -> bool:
     """Return True only for algorithm suites this build can verify (fail closed)."""
     return alg in SUPPORTED_ALGORITHMS
+
+
+# --- Content-encryption suites (AEAD over stored payloads) ------------------
+# Separate axis from the signing suite above: this identifies how a payload
+# blob was encrypted, so the read path can dispatch on it and we can migrate
+# the cipher later without losing the ability to read older records.
+ALG_AES_256_GCM_V1 = "aes-256-gcm-v1"
+
+DEFAULT_CONTENT_ALGORITHM = ALG_AES_256_GCM_V1
+
+SUPPORTED_CONTENT_ALGORITHMS: frozenset[str] = frozenset({ALG_AES_256_GCM_V1})
+
+
+def is_supported_content(alg: str | None) -> bool:
+    """Return True only for content-encryption suites this build can decrypt."""
+    return alg in SUPPORTED_CONTENT_ALGORITHMS
+

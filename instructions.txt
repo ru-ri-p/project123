@@ -243,7 +243,10 @@ COMPLIANCE GUARDRAILS FOR THE ASSISTANT:
   - [2026-06-01] Phase 3 Week 10: POST /v1/mitigate + mitigation events; GET /v1/trace/{id}/gate (resume_allowed); approvals linked to policy_decision event_id; resolve returns workflow_status; demo_enforcement_workflow.py; dashboard workflow gate banner.
   - [2026-06-01] Phase 3 Week 11: thick SDK — sdk/policy local evaluator; precheck_smart (local green/yellow, server orange/red); AsyncFlushBuffer; record_event(buffered=True); PolicyBundle from GET /v1/policies/active with bundled fallback.
   - [2026-06-01] Phase 4 Week 12: SigningProvider (local PEM | AWS KMS me-central-1); sign_message_hex; health signing metadata; evidence manifest + compliance_summary in JSON/ZIP; verify.py summary; demo_design_partner.py; docs/KMS_SETUP.md + DESIGN_PARTNER_CHECKLIST.md.
- 
+  - [2026-06-19] Rebranded Wathiq -> Attest; CLAUDE.md is the governing operating rules.
+  - [2026-06-19] Per-event algorithm id (app/crypto/algorithms.py, suite "sha256-ed25519-v1") stored inside the signed envelope and in events.alg; verifier dispatches on it and fails closed on unknown suites (CLAUDE.md rule 6).
+  - [2026-06-19] Content encryption migrated Fernet(AES-128-CBC+HMAC) -> AES-256-GCM ("aes-256-gcm-v1"): per-record 256-bit key, random 96-bit nonce, AAD bound to {enc_alg, org_id, payload_hash}; payloads.enc_alg column added; crypto-shred semantics unchanged (CLAUDE.md rule 6).
+
 ================================================================================
 END OF INSTRUCTIONS — re-read sections 1, 4, 5, 7 whenever touching crypto,
 data handling, or compliance-facing code.

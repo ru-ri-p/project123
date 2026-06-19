@@ -31,7 +31,7 @@ Attest **supports** PDPL-aligned technical controls and **aligns with** CBUAE AI
 | PDPL theme | How Attest supports it | Product capability |
 |------------|------------------------|-------------------|
 | **Data minimisation & privacy by design** | Redacts PII before hashing and storage | PII detection/redaction at ingest |
-| **Security of processing** | Encryption, signing, tenant isolation | Fernet payloads, Ed25519 chain, org-scoped API |
+| **Security of processing** | Encryption, signing, tenant isolation | AES-256-GCM payloads, Ed25519 chain, org-scoped API |
 | **Right to erasure** | Crypto-shred content; retain proof erasure occurred | `POST /v1/erasure` + signed `erasure` events |
 | **Accountability / demonstrability** | Offline verification without trusting vendor | Evidence export + standalone `verify.py` |
 | **Records of processing (ROPA-style)** | Each AI workflow = auditable trace | Traces, events, dashboard |
