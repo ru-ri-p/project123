@@ -21,6 +21,19 @@ Quick verify
 4. Success prints:      ALL EVENTS VERIFIED
                          (plus trace summary: event count, workflow status)
 
+Verify the external anchor (optional, recommended)
+--------------------------------------------------
+1. Install the RFC 3161 client:  pip install rfc3161-client
+2. Obtain the trusted TSA's root certificate(s) INDEPENDENTLY (e.g. the TSA's
+   published CA PEM) — do not rely on a copy supplied by the party you are
+   auditing.
+3. Run:  python verify.py bundle.json --tsa-roots trusted_tsa_roots.pem
+   - "ANCHOR trusted: TSA=... genTime=..."  the token timestamps this exact
+     batch root AND its TSA signature chains to a root you trust.
+   - "ANCHOR bound: genTime=..."            (no --tsa-roots) the token
+     timestamps this exact root; its TSA chain was not checked.
+   - "FAIL anchor: ..."                     imprint mismatch or chain failure.
+
 What is verified
 ----------------
 - Each event envelope is re-hashed and matched to its stored hash
@@ -28,12 +41,13 @@ What is verified
 - Hash chain links (prev_hash) are intact in sequence order
 - Merkle proofs show each trace event belongs to the sealed batch root
 - The batch root signature is valid
+- With --tsa-roots: the RFC 3161 anchor token timestamps this batch root and
+  its TSA signature chains to a TSA root you independently trust
 
 What is NOT verified by this script
 -----------------------------------
-- RFC 3161 TSA token validation (requires openssl ts or TSA CA certs)
 - That the customer sent every event before ingestion (integration boundary)
-- That model output content is factually correct (integrity ≠ truth)
+- That model output content is factually correct (integrity != truth)
 - Legal or regulatory compliance (see compliance_summary.json pitch_note)
 
 Signing backends
@@ -45,9 +59,10 @@ manifest.json → signing.backend:
 Anchor token
 ------------
 The anchor.token field (base64) is an RFC 3161 timestamp response over the
-batch Merkle root. Verify offline with:
+batch Merkle root, with the TSA signing certificate embedded. Verify it with
+the --tsa-roots option above (preferred), or independently with:
 
   echo <root_hex> | xxd -r -p > root.bin
-  # use openssl ts -verify with the token and TSA certificates
+  openssl ts -verify -data root.bin -in token.tsr -CAfile trusted_tsa_roots.pem
 
 Attest — tamper-evident provenance for regulated AI workflows.

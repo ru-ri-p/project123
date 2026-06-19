@@ -1,0 +1,4 @@
+{
+  "root_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "note": "RFC3161 token over 32-byte root; test CA in tsa_ca.crt"
+}

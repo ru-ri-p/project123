@@ -2,14 +2,25 @@
 """Standalone Attest evidence bundle verifier — no server access required.
 
 Usage:
-    python verify.py [path/to/bundle.json]
+    python verify.py [path/to/bundle.json] [--tsa-roots trusted_tsa_roots.pem]
 
-Depends only on Python stdlib + cryptography (instructions §4f).
+Core verification (event hashes, signatures, hash chain, Merkle proofs, batch
+root signature) depends only on Python stdlib + cryptography (instructions §4f).
+
+Optional external-anchor verification (RFC 3161 timestamp token) additionally
+needs `rfc3161-client` (pip install rfc3161-client). It checks that the token
+timestamps exactly this batch root, and — when you pass --tsa-roots with the
+trusted TSA's root certificate(s) — that the token's TSA signature chains to a
+root you trust. Without --tsa-roots the anchor is reported as time-bound but
+its trust chain is left unverified.
+
 Prints ALL EVENTS VERIFIED on success; exits non-zero on failure.
 """
 
 from __future__ import annotations
 
+import argparse
+import base64
 import hashlib
 import json
 import sys
@@ -77,6 +88,93 @@ def verify_merkle_proof(leaf_hex: str, index: int, proof: list[str], root_hex: s
     return current.hex() == root_hex
 
 
+def _tsa_leaf_from_token(resp: Any) -> Any:
+    """Pick the TSA signing certificate (timeStamping EKU) embedded in the token."""
+    from cryptography import x509
+    from cryptography.x509.oid import ExtendedKeyUsageOID
+
+    certs = []
+    for item in resp.signed_data.certificates:
+        cert = (
+            x509.load_der_x509_certificate(bytes(item))
+            if isinstance(item, (bytes, bytearray))
+            else item
+        )
+        certs.append(cert)
+    for cert in certs:
+        try:
+            eku = cert.extensions.get_extension_for_class(x509.ExtendedKeyUsage).value
+            if ExtendedKeyUsageOID.TIME_STAMPING in eku:
+                return cert
+        except x509.ExtensionNotFound:
+            continue
+    return certs[0] if certs else None
+
+
+def verify_anchor(token_b64: str, root_hex: str, tsa_roots_pem: bytes | None) -> dict[str, Any]:
+    """Validate an RFC 3161 anchor token offline. Returns a result dict; never raises.
+
+    status: "trusted" (imprint matches root AND TSA chains to a supplied trust root)
+            "bound"   (imprint matches root; trust root not supplied)
+            "skipped" (rfc3161-client not installed)
+            "failed"  (imprint mismatch, bad token, or chain/signature failure)
+    """
+    result: dict[str, Any] = {"status": "failed", "detail": "", "gen_time": None, "tsa": None}
+    try:
+        from rfc3161_client import VerifierBuilder, decode_timestamp_response
+        from rfc3161_client.errors import VerificationError
+    except ImportError:
+        result["status"] = "skipped"
+        result["detail"] = "rfc3161-client not installed; anchor not checked"
+        return result
+
+    # The verifier must never raise on bad input (instructions §4): a broad guard
+    # here turns any malformed token/cert into a reported failure, not a crash.
+    try:
+        from cryptography import x509
+
+        resp = decode_timestamp_response(base64.b64decode(token_b64.encode("ascii")))
+        tst = resp.tst_info
+        result["gen_time"] = tst.gen_time.isoformat() if tst.gen_time else None
+
+        root_bytes = bytes.fromhex(root_hex)
+        if tst.message_imprint.message != hashlib.sha256(root_bytes).digest():
+            result["detail"] = "token message imprint does not match the batch root"
+            return result
+
+        leaf = _tsa_leaf_from_token(resp)
+        if leaf is not None:
+            result["tsa"] = leaf.subject.rfc4514_string()
+
+        if not tsa_roots_pem:
+            result["status"] = "bound"
+            result["detail"] = "imprint matches root; supply --tsa-roots to verify the TSA chain"
+            return result
+
+        roots = x509.load_pem_x509_certificates(tsa_roots_pem)
+        if leaf is None or not roots:
+            result["detail"] = "missing TSA certificate in token or no trust roots provided"
+            return result
+
+        builder = VerifierBuilder().tsa_certificate(leaf)
+        for root_cert in roots:
+            builder = builder.add_root_certificate(root_cert)
+        try:
+            ok = builder.build().verify_message(resp, root_bytes)
+        except VerificationError as exc:
+            result["detail"] = f"TSA chain/signature verification failed: {exc}"
+            return result
+        if ok:
+            result["status"] = "trusted"
+            result["detail"] = "imprint matches root and TSA signature chains to a trusted root"
+        else:
+            result["detail"] = "TSA verification returned false"
+        return result
+    except Exception as exc:  # noqa: BLE001 - verifier must never raise on bad input
+        result["detail"] = f"anchor verification error: {type(exc).__name__}: {exc}"
+        return result
+
+
 def _print_summary(bundle: dict[str, Any]) -> None:
     manifest = bundle.get("manifest") or {}
     compliance = bundle.get("compliance_summary") or {}
@@ -95,7 +193,7 @@ def _print_summary(bundle: dict[str, Any]) -> None:
             print(f"Last policy tier: {last.get('tier')} allowed={last.get('allowed')}")
 
 
-def verify_bundle(bundle: dict[str, Any]) -> bool:
+def verify_bundle(bundle: dict[str, Any], *, tsa_roots_pem: bytes | None = None) -> bool:
     public_pem = bundle["public_key_pem"].encode("utf-8")
     events = bundle["events"]
     prev_hash: str | None = None
@@ -154,13 +252,37 @@ def verify_bundle(bundle: dict[str, Any]) -> bool:
             print("FAIL batch root signature")
             all_ok = False
 
+        anchor = batch_info.get("anchor")
+        if anchor and anchor.get("token"):
+            res = verify_anchor(anchor["token"], root, tsa_roots_pem)
+            status = res["status"]
+            if status == "trusted":
+                print(f"ANCHOR trusted: TSA={res['tsa']} genTime={res['gen_time']}")
+            elif status == "bound":
+                print(f"ANCHOR bound: genTime={res['gen_time']} ({res['detail']})")
+            elif status == "skipped":
+                print(f"ANCHOR not checked: {res['detail']}")
+            else:
+                print(f"FAIL anchor: {res['detail']}")
+                all_ok = False
+
     return all_ok
 
 
 def main() -> int:
-    bundle_path = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("bundle.json")
-    bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
-    if verify_bundle(bundle):
+    parser = argparse.ArgumentParser(description="Attest evidence bundle verifier")
+    parser.add_argument("bundle", nargs="?", default="bundle.json", help="path to bundle.json")
+    parser.add_argument(
+        "--tsa-roots",
+        dest="tsa_roots",
+        default=None,
+        help="PEM file of trusted TSA root certificate(s) to verify the RFC 3161 anchor",
+    )
+    args = parser.parse_args()
+
+    bundle = json.loads(Path(args.bundle).read_text(encoding="utf-8"))
+    tsa_roots_pem = Path(args.tsa_roots).read_bytes() if args.tsa_roots else None
+    if verify_bundle(bundle, tsa_roots_pem=tsa_roots_pem):
         print("ALL EVENTS VERIFIED")
         _print_summary(bundle)
         return 0

@@ -28,7 +28,12 @@ def request_tsa_timestamp(
     # Resolve requests.post at call time (not as a default arg bound at import)
     # so it stays injectable/patchable — keeps anchoring tests off the network.
     post = post_fn or requests.post
-    timestamp_request = TimestampRequestBuilder().data(root_bytes).build()
+    # cert_request(True): ask the TSA to embed its signing certificate in the
+    # token, so an evidence bundle is self-contained and verify.py can check the
+    # TSA signature offline against an independently-supplied trust root.
+    timestamp_request = (
+        TimestampRequestBuilder().data(root_bytes).cert_request(cert_request=True).build()
+    )
     try:
         response = post(
             tsa_url,
