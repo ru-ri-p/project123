@@ -1,0 +1,251 @@
+================================================================================
+ATTEST — PROJECT INSTRUCTIONS FOR CURSOR / AI CODING ASSISTANT
+Read this file at the start of EVERY coding session before writing code.
+Last updated: keep a date here and bump it when decisions change.
+================================================================================
+ 
+--------------------------------------------------------------------------------
+0. WHAT THIS PROJECT IS (the one sentence everything serves)
+--------------------------------------------------------------------------------
+Attest is a runtime governance + tamper-evident provenance control plane for AI
+workflows, built for UAE / MENA regulated industries (financial sector first).
+ 
+The single promise the whole product must deliver:
+  "You do not have to trust us, or our customer. Here is independent
+   cryptographic proof that this exact AI action happened at this exact time,
+   under these exact policies, and has not been altered since — and where
+   required, proof that its content was provably destroyed."
+ 
+If a feature does not serve that sentence, it is out of scope for now. Push back
+on scope creep. When in doubt, ask before adding dependencies or new components.
+ 
+--------------------------------------------------------------------------------
+1. THREAT MODEL (this drives the architecture — do not weaken it)
+--------------------------------------------------------------------------------
+The adversary INCLUDES the vendor (us) and the customer — not just outside
+attackers. This is why a self-signed hash chain is NOT enough on its own.
+ 
+Consequences that are NON-NEGOTIABLE:
+  - Every batch of events must be committed (anchored) to something we do NOT
+    control (RFC 3161 timestamp authority now; public transparency log later),
+    so history cannot be secretly rewritten even by us.
+  - Signing keys move to a cloud KMS/HSM in the UAE region in Phase 4. The
+    private key must never be printable/exportable in production.
+  - Be HONEST about the boundary: our guarantee starts at INGESTION. We cannot
+    prove the customer sent us everything (they could drop an event before it
+    reaches us). Narrow this with sequence numbers + expected-count checks.
+    NEVER claim we can fully close this gap. NEVER claim crypto proves the
+    output is TRUE — it proves the record is UNCHANGED.
+ 
+--------------------------------------------------------------------------------
+2. ARCHITECTURE (components and their boundaries)
+--------------------------------------------------------------------------------
+  - Attest API        FastAPI (Python 3.11+). Ingest, sign, anchor, replay, export, precheck.
+  - PostgreSQL        Tables: orgs, policies, traces, events, approvals, batches, anchors.
+  - Attest SDK        Small Python lib customers install. Two surface methods to start:
+                      new_trace() and record_event(). Later: local precheck + async buffer.
+  - Crypto core       canonical JSON -> SHA-256 -> Ed25519 sign -> Merkle batch -> anchor.
+  - Dashboard         SEPARATE Next.js (TypeScript) project. Approvals queue, trace viewer,
+                      evidence export. Do NOT mix into the Python repo.
+  - KMS (Phase 4)     UAE-region key custody.
+ 
+TWO PRODUCTS, DIFFERENT RULES — keep them mentally separate:
+  - PROVENANCE (Job 1): passive, asynchronous, never blocks anything. Built FIRST.
+  - ENFORCEMENT (Job 2): active, in the critical path, latency-sensitive. Built LAST.
+  Do NOT let enforcement logic leak into Phase 1. It will balloon scope.
+ 
+--------------------------------------------------------------------------------
+3. BUILD SEQUENCE (12 weeks — build in THIS order, ship each phase)
+--------------------------------------------------------------------------------
+PHASE 1 (Wks 1-4) PROVENANCE MVP:
+  canonicalization -> Ed25519 signing -> hash chains -> /v1/event ->
+  Python SDK -> Merkle trees -> RFC 3161 anchoring -> /v1/trace/{id}/replay ->
+  /v1/evidence/{id}/export (+ standalone verify.py inside the bundle) -> tests.
+PHASE 2 (Wks 5-7) MULTI-TENANCY + PII + DASHBOARD:
+  org isolation -> API-key hashing -> per-org fail_mode/region -> PII redaction ->
+  crypto-shredding for erasure -> Next.js trace viewer + approvals queue scaffold.
+PHASE 3 (Wks 8-11) ENFORCEMENT + POLICY ENGINE:
+  /v1/precheck -> 4 tiers (green/yellow/orange/red) -> layered detection ->
+  JSON policy engine (OPA/Rego-ready) -> auto-mitigation -> approvals end-to-end ->
+  thick-SDK pattern (local eval + async buffered recording).
+PHASE 4 (Wk 12) HARDENING + PITCH:
+  migrate signing to UAE-region KMS -> polish evidence bundle -> lawyer review ->
+  land one CBUAE-regulated design partner.
+ 
+The whole project is "done" when: run a workflow -> trigger a RED case ->
+human approves in dashboard -> export bundle -> the risk officer runs OUR
+verify.py on THEIR machine and sees "ALL EVENTS VERIFIED".
+ 
+--------------------------------------------------------------------------------
+4. CRYPTOGRAPHIC RULES (break these and the product is worthless)
+--------------------------------------------------------------------------------
+  a) CANONICALIZATION: one function, used identically on the write path AND the
+     verify path. Rules: json.dumps(obj, sort_keys=True, separators=(",",":"),
+     ensure_ascii=False).encode("utf-8"). Never change these rules casually; a
+     change silently invalidates all prior verification. If you MUST change them,
+     version the canonicalization scheme and store the version on each event.
+  b) TIMESTAMPS: server sets created_at in UTC (ISO-8601). Client timestamps are
+     untrusted metadata only. Never hash a client-supplied time as authoritative.
+  c) CHAINING: each event stores prev_hash = hash of the previous event in the
+     same trace. Enforce strictly monotonic seq per trace (UNIQUE(trace_id, seq)).
+  d) THE EVENT ENVELOPE (the thing that gets hashed) and the CONTENT (prompt/
+     output/PII) are STORED SEPARATELY. The envelope holds only payload_hash.
+     This is what makes PDPL erasure possible without breaking the chain.
+  e) KEEP THE CRYPTO SURFACE SMALL. Use stdlib hashlib/json + the `cryptography`
+     lib only. Do NOT pull in exotic crypto packages. Do NOT invent your own
+     primitives. Do NOT roll your own canonical JSON if a reviewed option exists.
+  f) verify.py shipped in each evidence bundle must depend ONLY on widely
+     available libraries and the bundle's own contents — it must verify with
+     ZERO access to our servers.
+ 
+--------------------------------------------------------------------------------
+5. UAE / MENA COMPLIANCE — what the code must respect and map to
+--------------------------------------------------------------------------------
+Legal landscape (as of 2026):
+  - UAE has NO standalone AI law. AI must comply with EXISTING laws: PDPL
+    (Federal Decree-Law No. 45 of 2021), the CBUAE AI Guidance Note (11 Feb 2026),
+    Child Digital Safety Law, sectoral + free-zone rules.
+  - PDPL: effective 1 Jan 2026, FULL COMPLIANCE due 1 Jan 2027 (one-year transition).
+    Free zones (DIFC, ADGM) have their OWN regimes — out of mainland PDPL scope.
+  - CBUAE AI Guidance Note: NON-BINDING but SUPERVISORY. Do not tell customers it
+    is "the law." Correct framing: it shapes supervisory dialogue and regulatory
+    assessment. Applies to all Licensed Financial Institutions (LFIs).
+ 
+What the CBUAE Guidance expects (maps directly to Attest features):
+  - Documented AI governance framework, proportionate to size      -> policy engine + audit
+  - Comprehensive inventory of every AI model + regular reporting   -> provenance / traces
+  - Board/senior-management accountability for AI outcomes          -> approvals + named approver
+  - Fairness / non-discrimination (esp. lending, insurance, pricing) -> RED-tier rules
+  - Transparency / explainability                                   -> citation + reason on every decision
+  - Effective HUMAN OVERSIGHT of automated outcomes                 -> RED = human approval (mandatory)
+  - Documented risk assessments, validation, controls              -> every decision recorded as a signed event
+ 
+PDPL obligations the code must support:
+  - Data minimisation + privacy by design        -> redact PII BEFORE storage
+  - Right to erasure                              -> crypto-shredding (destroy key, keep proof)
+  - Data residency / cross-border control         -> org.region; keep data + keys in UAE region
+  - Cross-border transfer needs a lawful basis     -> RED-tier rule on transfers w/o basis
+  - DPIA / audit-readiness                         -> evidence bundle export
+  - Record of Processing Activities (ROPA)         -> traces ARE a processing record
+  - Encryption: AES-256 at rest, TLS 1.2+ in transit, MFA on admin access
+ 
+COMPLIANCE GUARDRAILS FOR THE ASSISTANT:
+  - Attest ENFORCES THE INSTITUTION'S OWN documented policies and PROVES it did.
+    Attest does NOT autonomously "decide what is legal." The institution's board
+    owns the policy (CBUAE puts accountability on them). We are the control +
+    evidence layer with sensible MENA-aware starter templates they customise.
+  - NEVER hardcode a claim that an output is "compliant" or "legal." Record
+    decisions + reasons; let humans judge RED cases.
+  - Default to fail-CLOSED (deny_on_error) for regulated/gov orgs; fail-OPEN
+    (allow_with_flag) only where the org explicitly opts in.
+ 
+--------------------------------------------------------------------------------
+6. EXTERNAL ANCHORING NOTES (read before wiring Week 3 / Day 14)
+--------------------------------------------------------------------------------
+  - MVP anchor = RFC 3161 trusted timestamp over the Merkle ROOT (not per event).
+  - rfc3161-client APIs vary by version — READ ITS CURRENT DOCS, do not guess the
+    method names. If it fights you, anchoring via `openssl ts` is an acceptable
+    fallback; the concept (sign the root's hash, store the returned token) is identical.
+  - Store the returned timestamp token next to the batch row (base64) + anchored_at.
+  - Public transparency log (e.g. Trillian-style) or public-chain anchoring is a
+    PHASE 4 "nice to have," NOT an MVP blocker. Do not start a blockchain
+    integration before the TSA anchor works end-to-end.
+ 
+--------------------------------------------------------------------------------
+7. SECURITY RULES (hard stops)
+--------------------------------------------------------------------------------
+  - NEVER commit secrets. .gitignore must include: .env, keys/, *.pem, *.lock secrets.
+  - Store API keys HASHED (argon2/sha256), never raw. Compare by hashing the input.
+  - EVERY DB query is scoped by org_id. A single missing `WHERE org_id = ?` is a
+    cross-tenant leak — for a governance company that is fatal. Centralise data
+    access behind functions that REQUIRE an org_id argument so it can't be forgotten.
+  - Validate ALL input with Pydantic models. No raw dict parsing of request bodies.
+  - Catch SPECIFIC exceptions, never bare `except:`. Log errors with context.
+  - No PII or secrets in logs. Redact before logging.
+  - Rate-limit public endpoints. Return 401 on bad API key, 403 on wrong-org access.
+ 
+--------------------------------------------------------------------------------
+8. CODE QUALITY RULES FOR THE ASSISTANT (how to behave in this repo)
+--------------------------------------------------------------------------------
+  - Python 3.11+ with type hints on all functions. Run `ruff` and `mypy`; keep clean.
+  - Small, single-purpose functions. Prefer readability over cleverness — a newbie
+    must be able to follow the crypto path.
+  - Do NOT add a dependency without justifying it here first. Keep the tree minimal,
+    especially crypto.
+  - Do NOT invent library APIs. If unsure of a method signature (esp. cryptography,
+    rfc3161-client, KMS SDKs), say so and check the real docs rather than guessing.
+  - Write a test for anything on the verification path. The tamper-detection test
+    (intact trace verifies True; corrupt one event -> False, pointing at the exact
+    event) is the single most important test — never let it regress.
+  - Migrations via Alembic only. Never hand-edit a live schema.
+  - When you make an architectural decision, append it to a DECISIONS log section
+    (section 11 below) with a date and a one-line rationale. Maintain continuity
+    across sessions — re-read this file and the decisions log before large changes.
+  - If asked to do something that conflicts with sections 1, 4, 5, or 7, STOP and
+    flag the conflict instead of silently complying.
+ 
+--------------------------------------------------------------------------------
+9. DATA MODEL (canonical reference — keep schema in sync with this)
+--------------------------------------------------------------------------------
+  orgs(id, name, api_key_hash, region='uae', retention_days_payload=365,
+       fail_mode='deny_on_error', created_at)
+  policies(id, org_id, name, version, rules JSONB, active, created_at)
+  traces(id, org_id, policy_version, root_hash, created_at)
+  events(id, org_id, trace_id, seq, type, payload_hash, envelope JSONB,
+         prev_hash, hash, signature, policy_version, created_at,
+         UNIQUE(trace_id, seq))
+  batches(id, org_id_nullable, root, signature, event_ids, sealed_at)
+  anchors(id, batch_id, kind='rfc3161', token, anchored_at)
+  approvals(id, org_id, trace_id, event_id, approver_id, status, comment, created_at)
+  event.type in: model_completion | tool_call | policy_decision | approval_action | mitigation | erasure
+  Content blobs (prompt/output/PII) live in a SEPARATE encrypted store keyed by
+  payload_hash, with a per-record key that can be destroyed (crypto-shred).
+ 
+--------------------------------------------------------------------------------
+10. API SURFACE (target endpoints)
+--------------------------------------------------------------------------------
+  GET  /health
+  POST /v1/event                         record one event (sign + chain)
+  GET  /v1/policies/active                 active policy document (JSON rules pack)
+  POST /v1/precheck                      Phase 3: policy decision + tier + reason
+  GET  /v1/trace/{trace_id}/replay       verify hashes, signatures, chain links
+  GET  /v1/traces                        list traces for org (dashboard)
+  GET  /v1/evidence/{trace_id}/export    bundle: events + merkle proofs + anchor + verify.py
+  GET  /v1/approvals?status=pending      list approvals (dashboard scaffold)
+  POST /v1/approvals/{approval_id}/resolve   human approve/deny -> approval_action event
+  GET  /v1/trace/{trace_id}/gate             workflow resume / abort status
+  POST /v1/mitigate                        apply mitigations + record mitigation event
+  (auth on all except /health via x-api-key header -> org)
+ 
+--------------------------------------------------------------------------------
+11. DECISIONS LOG (append-only — newest at bottom; the assistant maintains this)
+--------------------------------------------------------------------------------
+  - [init] Name: Attest. Wedge: provenance first, enforcement second.
+  - [init] Threat model includes vendor + customer -> external anchoring is mandatory, not optional.
+  - [init] Finance-first (CBUAE LFIs) as the credible path to UAE gov procurement.
+  - [init] Provenance and enforcement kept as separate concerns with different failure semantics.
+  - (add new decisions below as you build, with dates)
+  - [2026-05-31] Phase 1 Week 1: crypto split into app/crypto/{canonical,signing}.py; one canonical_bytes/ sha256_hex pair shared by write+verify paths (instructions §4a).
+  - [2026-05-31] Dev signing uses Ed25519 PEM in keys/ (gitignored); KMS migration deferred to Phase 4 with TODO in signing.py.
+  - [2026-05-31] InvalidSignature caught specifically in verify_hex — no bare except (instructions §7).
+  - [2026-05-31] sdk/ scaffold added; AttestClient lands Week 2 Day 10 per roadmap.
+  - [2026-05-31] Phase 1 Week 2: PostgreSQL via docker-compose; Alembic migrations; org-scoped events + separate payloads table; POST /v1/event with hash chain + Ed25519 signing; AttestClient SDK.
+  - [2026-05-31] API keys stored as SHA-256 hashes; dev seed org uses org_demo_key (scripts/seed_dev_org.py).
+  - [2026-05-31] created_at set server-side UTC ISO in envelope; client timestamps never authoritative (instructions §4b).
+  - [2026-06-01] Docker Postgres mapped to host port 5433 — local Postgres already occupies 5432 on dev machine.
+  - [2026-06-01] Phase 1 Week 3: Merkle batch sealing (app/crypto/merkle.py); batches + anchors tables; RFC 3161 anchoring via rfc3161-client + FreeTSA default; scripts/seal_and_anchor.py for cron.
+  - [2026-06-01] Phase 1 Week 4: GET /v1/trace/{id}/replay + GET /v1/evidence/{id}/export (json|zip); shared verification in app/services/verification.py; standalone app/bundle/verify.py (stdlib+cryptography only); tamper-detection test in tests/test_replay.py.
+  - [2026-06-01] Phase 2 Week 5: cross-tenant trace guard (403); GET/PATCH /v1/org/me + /v1/org/settings; org repo + create_org script; second seed org; in-memory rate limit by API key.
+  - [2026-06-01] Phase 2 Week 6: PII redaction before hash/storage (app/services/pii.py); Fernet-encrypted payloads + payload_keys table for crypto-shredding; POST /v1/erasure records signed erasure event; content unreadable after shred, chain intact.
+  - [2026-06-01] Phase 2 Week 7: Next.js dashboard in dashboard/ (separate from Python API); GET /v1/traces + GET /v1/approvals + POST resolve; approvals table scaffold; CORS for localhost:3000; server-side API key proxy for export/resolve.
+  - [2026-06-01] Phase 3 Week 8: POST /v1/precheck with green/yellow/orange/red tiers; layered PII scan + JSON policy rules; policies table + seed_dev_policy; auto pending approval on orange/red; signed policy_decision event; SDK precheck().
+  - [2026-06-01] Phase 3 Week 9: OPA-ready PolicyInput/PolicyOutput contract; deterministic layers (PII, citations, phrases, cross-border); priority JSON rules (Appendix A pack with regulatory_ref); risk_score + mitigations on precheck; GET /v1/policies/active.
+  - [2026-06-01] Phase 3 Week 10: POST /v1/mitigate + mitigation events; GET /v1/trace/{id}/gate (resume_allowed); approvals linked to policy_decision event_id; resolve returns workflow_status; demo_enforcement_workflow.py; dashboard workflow gate banner.
+  - [2026-06-01] Phase 3 Week 11: thick SDK — sdk/policy local evaluator; precheck_smart (local green/yellow, server orange/red); AsyncFlushBuffer; record_event(buffered=True); PolicyBundle from GET /v1/policies/active with bundled fallback.
+  - [2026-06-01] Phase 4 Week 12: SigningProvider (local PEM | AWS KMS me-central-1); sign_message_hex; health signing metadata; evidence manifest + compliance_summary in JSON/ZIP; verify.py summary; demo_design_partner.py; docs/KMS_SETUP.md + DESIGN_PARTNER_CHECKLIST.md.
+ 
+================================================================================
+END OF INSTRUCTIONS — re-read sections 1, 4, 5, 7 whenever touching crypto,
+data handling, or compliance-facing code.
+================================================================================
+ 

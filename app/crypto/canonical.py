@@ -1,25 +1,26 @@
-"""THE canonical form for Attest. Never duplicate this logic. Both the
-write path and the verify path import THIS function. Versioned by the
-evidence format; changing it breaks all prior verification.
+"""Canonical JSON serialization and SHA-256 hashing.
 
-A hash fingerprints bytes, not meaning. {"a":1,"b":2} and {"b":2,"a":1} mean
-the same but are different bytes -> different fingerprints. We force data into
-exactly one written form (keys sorted, no stray spaces, UTF-8) so that the same
-meaning always produces the same bytes, and therefore the same fingerprint.
+Rules (must match on write path AND verify path — see instructions.txt §4):
+  json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
 """
 
-import json
+from __future__ import annotations
+
 import hashlib
+import json
+from typing import Any
 
 
-def canonical_bytes(obj: dict) -> bytes:
-    # sort_keys=True       -> key order can never change the bytes
-    # separators=(",",":") -> no incidental whitespace between elements
-    # ensure_ascii=False   -> non-ASCII (e.g. Arabic) kept as real UTF-8, not \u escapes
+def canonical_bytes(obj: dict[str, Any]) -> bytes:
+    """Convert a dict to deterministic UTF-8 bytes for hashing."""
     return json.dumps(
-        obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+        obj,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
     ).encode("utf-8")
 
 
-def sha256_hex(obj: dict) -> str:
+def sha256_hex(obj: dict[str, Any]) -> str:
+    """SHA-256 fingerprint of a dict's canonical form."""
     return hashlib.sha256(canonical_bytes(obj)).hexdigest()
