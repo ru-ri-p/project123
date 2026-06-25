@@ -100,22 +100,29 @@ Rules that matter:
 With the API running, generate a realistic load and verify it:
 
 ```bash
-# 1. Record 125 events across 25 transactions, replay them, export a bundle
+# 1. Record 125 events across 25 transactions, replay, export, and verify —
+#    --verify fetches the TSA root and runs verify.py for you (turnkey):
+pip install cryptography rfc3161-client
 python scripts/demo_pilot_provenance.py --base-url http://attest-api:10000 \
-    --api-key <tradeeasy_api_key> --transactions 25 --out pilot_bundle.json
+    --api-key <tradeeasy_api_key> --transactions 25 --out pilot_bundle.json --verify
 #    -> "Replay of 25 traces: all_verified=True"
+#    -> Fetched TSA root ... sha256 fingerprint: ...   (confirm against FreeTSA's published value)
+#    -> ALL EVENTS VERIFIED
+#    -> ANCHOR trusted: TSA=... genTime=...            (once the batch is anchored)
+#    (air-gapped? pass --tsa-root-file freetsa_root.pem instead of fetching)
 
 # 2. Tamper-evidence: change one stored event, then replay
 #    UPDATE events SET hash='0...0' WHERE seq=2 AND trace_id='<id>';
 #    GET /v1/trace/<id>/replay  -> all_verified=false, points at seq 2
 
-# 3. Independent offline verification (auditor's machine, no server access)
-pip install cryptography rfc3161-client
+# 3. Independent offline verification, by hand on the auditor's machine:
 curl -o freetsa_root.pem https://freetsa.org/files/cacert.pem   # the TSA's published root
 python app/bundle/verify.py pilot_bundle.json --tsa-roots freetsa_root.pem
-#    -> ALL EVENTS VERIFIED
-#    -> ANCHOR trusted: TSA=... genTime=...     (once the batch is anchored)
 ```
+
+Note: a freshly recorded trace is anchored only after the seal-and-anchor cron
+runs; before that, verify.py reports `ALL EVENTS VERIFIED` without an `ANCHOR`
+line. Re-export after anchoring to see `ANCHOR trusted`.
 
 The pilot is a success when steps 1–3 pass: data records, tampering is caught, and
 an independent party verifies the bundle — including the third-party anchor.
