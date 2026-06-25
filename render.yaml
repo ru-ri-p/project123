@@ -1,0 +1,69 @@
+# Render Blueprint for the Attest pilot (provenance-only, internal-only).
+#
+# This provisions three things on TradeEasy's Render account:
+#   1. attest-db          managed PostgreSQL 16 (encryption-at-rest + backups)
+#   2. attest-api         the Attest API as a PRIVATE service (no public URL),
+#                         reachable only inside TradeEasy's Render network
+#   3. attest-seal-anchor a cron job that seals batches and anchors the Merkle
+#                         root to the external TSA on a schedule
+#
+# IMPORTANT manual step (cannot live in this file — it is a secret):
+#   Generate the Ed25519 keypair once (scripts/generate_keys.py), then in the
+#   Render dashboard add BOTH as "Secret Files" on attest-api AND
+#   attest-seal-anchor, mounted at:
+#       /etc/secrets/ed25519_private.pem
+#       /etc/secrets/ed25519_public.pem
+#   The private key is NEVER committed and NEVER placed in this blueprint.
+#
+# Render's blueprint schema evolves; if a field is rejected, configure the same
+# resources via the dashboard (see docs/PILOT_TRADEEASY.md for the manual path).
+
+databases:
+  - name: attest-db
+    databaseName: attest
+    user: attest
+    postgresMajorVersion: "16"
+    plan: free          # bump to starter/standard beyond the pilot
+
+services:
+  # --- Attest API: PRIVATE service (internal-only) -------------------------
+  - type: pserv
+    name: attest-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: starter
+    autoDeploy: false
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: attest-db
+          property: connectionString
+      - key: SIGNING_BACKEND
+        value: local
+      - key: SIGNING_PRIVATE_KEY_PATH
+        value: /etc/secrets/ed25519_private.pem
+      - key: SIGNING_PUBLIC_KEY_PATH
+        value: /etc/secrets/ed25519_public.pem
+      - key: TSA_URL
+        value: https://freetsa.org/tsr
+
+  # --- Seal + anchor cron job ---------------------------------------------
+  - type: cron
+    name: attest-seal-anchor
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    schedule: "*/5 * * * *"        # every 5 minutes; align with BATCH_INTERVAL_SECONDS
+    dockerCommand: python scripts/seal_and_anchor.py
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: attest-db
+          property: connectionString
+      - key: SIGNING_BACKEND
+        value: local
+      - key: SIGNING_PRIVATE_KEY_PATH
+        value: /etc/secrets/ed25519_private.pem
+      - key: SIGNING_PUBLIC_KEY_PATH
+        value: /etc/secrets/ed25519_public.pem
+      - key: TSA_URL
+        value: https://freetsa.org/tsr
