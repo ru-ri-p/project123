@@ -2,6 +2,14 @@
 
 Runtime governance and tamper-evident provenance control plane for AI workflows — built for UAE & MENA regulated industries.
 
+## Design-partner pilot (TradeEasy)
+
+Implementing the provenance pilot? Start here:
+
+- **[docs/PILOT_RUNBOOK.md](docs/PILOT_RUNBOOK.md)** — the A-to-Z, step-by-step implementation runbook (Render deploy → SDK integration → acceptance test).
+- [docs/PILOT_TRADEEASY.md](docs/PILOT_TRADEEASY.md) — technical reference (architecture, config, SDK details).
+- [docs/PILOT_SCOPE_NOTE.md](docs/PILOT_SCOPE_NOTE.md) — partner-facing note on what the pilot proves and does not prove.
+
 ## Phase 1 — Provenance MVP
 
 ### Prerequisites
