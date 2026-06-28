@@ -45,10 +45,10 @@ outbound timestamp request to the TSA.
    ```bash
    python scripts/generate_keys.py     # writes keys/ed25519_private.pem + public
    ```
-2. **Create the Render resources** from the blueprint (`render.yaml`): a private
+2. **Create the Render resources** from the blueprint (`render.selfhost.yaml`): a private
    `attest-api`, managed `attest-db`, and the `attest-seal-anchor` cron. If a
    blueprint field is rejected by Render's current schema, create the same three
-   resources via the dashboard with the env vars listed in `render.yaml`.
+   resources via the dashboard with the env vars listed in `render.selfhost.yaml`.
 3. **Add the keys as Secret Files** on BOTH `attest-api` and `attest-seal-anchor`,
    mounted at:
    ```

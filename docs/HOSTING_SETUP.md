@@ -40,14 +40,14 @@ Secret File (Step 3).
 ## Step 2 — Deploy the hosted blueprint
 
 In Render: **New + → Blueprint**, point it at the repo, and choose
-**`render.hosted.yaml`** (the PUBLIC variant). It creates:
+**`render.yaml`** (the default, public variant). It creates:
 
 - `attest-db` — managed PostgreSQL 16.
 - `attest-api` — the API as a **public web service** with an automatic HTTPS URL.
 - `attest-seal-anchor` — the cron that anchors batches to the TSA.
 
 (If Render rejects a blueprint field, create the three resources by hand with the
-env vars shown in `render.hosted.yaml`.)
+env vars shown in `render.yaml`.)
 
 ## Step 3 — Add the signing key as Secret Files
 

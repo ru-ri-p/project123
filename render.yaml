@@ -1,22 +1,19 @@
-# Render Blueprint for the Attest pilot (provenance-only, internal-only).
+# Render Blueprint — DEFAULT (hosted) configuration.
 #
-# This provisions three things on TradeEasy's Render account:
-#   1. attest-db          managed PostgreSQL 16 (encryption-at-rest + backups)
-#   2. attest-api         the Attest API as a PRIVATE service (no public URL),
-#                         reachable only inside TradeEasy's Render network
-#   3. attest-seal-anchor a cron job that seals batches and anchors the Merkle
-#                         root to the external TSA on a schedule
+# Render's Blueprint feature auto-reads this file (render.yaml). This is the
+# RECOMMENDED pilot model: the Attest provider runs the service and hands the
+# design partner only the SDK + a URL + an API key. The API is a PUBLIC web
+# service (HTTPS URL the partner's app can reach), protected by API-key auth +
+# rate limiting + Render's automatic TLS.
 #
-# IMPORTANT manual step (cannot live in this file — it is a secret):
-#   Generate the Ed25519 keypair once (scripts/generate_keys.py), then in the
-#   Render dashboard add BOTH as "Secret Files" on attest-api AND
-#   attest-seal-anchor, mounted at:
-#       /etc/secrets/ed25519_private.pem
-#       /etc/secrets/ed25519_public.pem
-#   The private key is NEVER committed and NEVER placed in this blueprint.
+# For the internal-only, partner-self-hosts-everything variant, see
+# render.selfhost.yaml (and docs/PILOT_RUNBOOK.md).
 #
-# Render's blueprint schema evolves; if a field is rejected, configure the same
-# resources via the dashboard (see docs/PILOT_TRADEEASY.md for the manual path).
+# Manual step (a secret, cannot live here): generate the Ed25519 keypair
+# (scripts/generate_keys.py) and add BOTH as Render "Secret Files" on
+# attest-api AND attest-seal-anchor, mounted at:
+#     /etc/secrets/ed25519_private.pem
+#     /etc/secrets/ed25519_public.pem
 
 databases:
   - name: attest-db
@@ -26,12 +23,12 @@ databases:
     plan: free          # bump to starter/standard beyond the pilot
 
 services:
-  # --- Attest API: PRIVATE service (internal-only) -------------------------
-  - type: pserv
+  # --- Attest API: PUBLIC web service (HTTPS URL the partner app calls) -----
+  - type: web
     name: attest-api
     runtime: docker
     dockerfilePath: ./Dockerfile
-    plan: starter
+    plan: starter        # 'free' also works but sleeps when idle (cold starts)
     autoDeploy: false
     envVars:
       - key: DATABASE_URL
@@ -52,7 +49,7 @@ services:
     name: attest-seal-anchor
     runtime: docker
     dockerfilePath: ./Dockerfile
-    schedule: "*/5 * * * *"        # every 5 minutes; align with BATCH_INTERVAL_SECONDS
+    schedule: "*/5 * * * *"
     dockerCommand: python scripts/seal_and_anchor.py
     envVars:
       - key: DATABASE_URL

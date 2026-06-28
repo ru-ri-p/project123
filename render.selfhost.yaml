@@ -1,10 +1,14 @@
-# Render Blueprint — HOSTED variant (Attest provider operates this).
+# Render Blueprint — SELF-HOST (internal-only) variant.
 #
-# Use this when YOU (Attest) host the service and give the design partner only
-# the SDK + a URL + an API key. Difference from render.yaml: attest-api is a
-# PUBLIC web service (gets an HTTPS URL the partner's app can reach) instead of
-# an internal-only private service. It is protected by API-key auth + rate
-# limiting + Render's automatic TLS.
+# Use this when the design partner runs the WHOLE service on their own Render
+# account and the API must NOT be publicly reachable. Difference from the
+# default render.yaml: attest-api is a PRIVATE service (internal-only, no public
+# URL), reachable only inside the partner's Render network.
+#
+# NOTE: Render Blueprints auto-read `render.yaml`. To deploy THIS variant,
+# either copy it over render.yaml on your branch (`cp render.selfhost.yaml
+# render.yaml`) before running the Blueprint, or create the resources manually
+# (New + → Private Service / PostgreSQL / Cron Job) with the env vars below.
 #
 # Manual step (a secret, cannot live here): generate the Ed25519 keypair
 # (scripts/generate_keys.py) and add BOTH as Render "Secret Files" on
@@ -20,12 +24,12 @@ databases:
     plan: free          # bump to starter/standard beyond the pilot
 
 services:
-  # --- Attest API: PUBLIC web service (HTTPS URL the partner app calls) -----
-  - type: web
+  # --- Attest API: PRIVATE service (internal-only) -------------------------
+  - type: pserv
     name: attest-api
     runtime: docker
     dockerfilePath: ./Dockerfile
-    plan: starter        # 'free' also works but sleeps when idle (cold starts)
+    plan: starter
     autoDeploy: false
     envVars:
       - key: DATABASE_URL

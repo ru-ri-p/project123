@@ -79,8 +79,15 @@ both into Render in step 5.
 
 ## 3. Create the Render resources from the Blueprint `[Render]`
 
-In Render: **New + → Blueprint**, point it at the repo. Render reads `render.yaml`
-and creates:
+The internal-only config is `render.selfhost.yaml`. Render's Blueprint auto-reads
+`render.yaml` (which is the *public* default), so first put the self-host config
+in place on your branch:
+
+```bash
+cp render.selfhost.yaml render.yaml && git commit -am "use self-host blueprint" && git push
+```
+
+Then in Render: **New + → Blueprint**, point it at the repo. It creates:
 
 - `attest-db` — managed PostgreSQL 16.
 - `attest-api` — the Attest API as a **Private Service** (internal-only, no public URL).
@@ -88,7 +95,7 @@ and creates:
 
 If Render rejects a blueprint field (the schema evolves), create the same three
 resources manually (New + → Private Service / PostgreSQL / Cron Job) using the
-Docker runtime and the env vars listed in `render.yaml`.
+Docker runtime and the env vars listed in `render.selfhost.yaml`.
 
 ✅ Three resources appear in the Render dashboard. `attest-api` will fail to start
 until step 5 (no key yet) — that's expected.
@@ -116,7 +123,7 @@ Files** and add two files (Render mounts them at `/etc/secrets/<filename>`):
 | `ed25519_private.pem` | paste the full private PEM from step 2 |
 | `ed25519_public.pem`  | paste the full public PEM from step 2 |
 
-(The `render.yaml` env vars already point `SIGNING_PRIVATE_KEY_PATH` /
+(The `render.selfhost.yaml` env vars already point `SIGNING_PRIVATE_KEY_PATH` /
 `SIGNING_PUBLIC_KEY_PATH` at `/etc/secrets/...`.)
 
 ✅ Both services list the two secret files. Trigger a redeploy of `attest-api`.
