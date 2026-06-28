@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from sdk.policy.bundle import PolicyBundle
-from sdk.policy.defaults import DEFAULT_POLICY_RULES
-from sdk.policy.evaluator import evaluate_local, needs_server_escalation
+from attest_sdk.policy.bundle import PolicyBundle
+from attest_sdk.policy.defaults import DEFAULT_POLICY_RULES
+from attest_sdk.policy.evaluator import evaluate_local, needs_server_escalation
 
 
 def test_local_green() -> None:

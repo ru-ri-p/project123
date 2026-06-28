@@ -9,3 +9,9 @@ keys/
 *.pem
 ~$*
 docs/~$*
+
+# Build artifacts (the SDK wheel is built on demand, not committed)
+build/
+dist/
+*.egg-info/
+*.whl

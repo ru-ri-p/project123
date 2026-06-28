@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-from sdk.attest import AttestClient
+from attest_sdk.attest import AttestClient
 
 
 def test_record_event_posts_to_api() -> None:
@@ -13,7 +13,7 @@ def test_record_event_posts_to_api() -> None:
     mock_response.json.return_value = {"hash": "abc", "signature": "def", "seq": 1}
     mock_response.raise_for_status = MagicMock()
 
-    with patch("sdk.attest.requests.post", return_value=mock_response) as mock_post:
+    with patch("attest_sdk.attest.requests.post", return_value=mock_response) as mock_post:
         result = client.record_event("trace-1", 1, "model_completion", {"prompt": "hi"})
 
     assert result["hash"] == "abc"

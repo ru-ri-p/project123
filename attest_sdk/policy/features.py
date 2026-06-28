@@ -5,8 +5,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from sdk.policy.pii import detect_pii_labels
-from sdk.policy.types import FeatureVector
+from .pii import detect_pii_labels
+from .types import FeatureVector
 
 PROHIBITED_PHRASE_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     (

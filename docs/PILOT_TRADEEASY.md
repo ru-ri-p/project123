@@ -68,11 +68,11 @@ outbound timestamp request to the TSA.
 
 ## Integrate (TradeEasy's Python backend)
 
-Install the SDK (it ships in this repo as `sdk/`), point it at the private API,
+Install the SDK (`pip install attest_sdk-...whl` or from git), point it at the API,
 and record one trace per transaction:
 
 ```python
-from sdk.attest import AttestClient
+from attest_sdk import AttestClient
 
 attest = AttestClient(
     api_key="<tradeeasy_api_key>",

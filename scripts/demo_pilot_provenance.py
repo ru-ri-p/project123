@@ -26,7 +26,7 @@ import requests
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from sdk.attest import AttestClient  # noqa: E402
+from attest_sdk.attest import AttestClient  # noqa: E402
 
 VERIFY_SCRIPT = ROOT / "app" / "bundle" / "verify.py"
 FREETSA_ROOT_URL = "https://freetsa.org/files/cacert.pem"

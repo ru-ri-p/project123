@@ -1,7 +1,17 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
 [project]
-name = "attest"
+name = "attest-sdk"
 version = "0.1.0"
+description = "Attest Python SDK — record tamper-evident, signed provenance events for AI workflows."
 requires-python = ">=3.11"
+dependencies = ["requests>=2.32.0"]
+readme = "attest_sdk/README.md"
+
+[tool.setuptools]
+packages = ["attest_sdk", "attest_sdk.policy"]
 
 [tool.ruff]
 target-version = "py311"
@@ -12,7 +22,7 @@ select = ["E", "F", "I", "UP", "B"]
 
 [tool.ruff.lint.per-file-ignores]
 "scripts/*" = ["E402"]
-"sdk/buffer.py" = ["BLE001"]
+"attest_sdk/buffer.py" = ["BLE001"]
 "alembic/versions/*" = ["E501"]
 "app/api/*" = ["B008"]
 

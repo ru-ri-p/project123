@@ -1,0 +1,63 @@
+# Render Blueprint — HOSTED variant (Attest provider operates this).
+#
+# Use this when YOU (Attest) host the service and give the design partner only
+# the SDK + a URL + an API key. Difference from render.yaml: attest-api is a
+# PUBLIC web service (gets an HTTPS URL the partner's app can reach) instead of
+# an internal-only private service. It is protected by API-key auth + rate
+# limiting + Render's automatic TLS.
+#
+# Manual step (a secret, cannot live here): generate the Ed25519 keypair
+# (scripts/generate_keys.py) and add BOTH as Render "Secret Files" on
+# attest-api AND attest-seal-anchor, mounted at:
+#     /etc/secrets/ed25519_private.pem
+#     /etc/secrets/ed25519_public.pem
+
+databases:
+  - name: attest-db
+    databaseName: attest
+    user: attest
+    postgresMajorVersion: "16"
+    plan: free          # bump to starter/standard beyond the pilot
+
+services:
+  # --- Attest API: PUBLIC web service (HTTPS URL the partner app calls) -----
+  - type: web
+    name: attest-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: starter        # 'free' also works but sleeps when idle (cold starts)
+    autoDeploy: false
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: attest-db
+          property: connectionString
+      - key: SIGNING_BACKEND
+        value: local
+      - key: SIGNING_PRIVATE_KEY_PATH
+        value: /etc/secrets/ed25519_private.pem
+      - key: SIGNING_PUBLIC_KEY_PATH
+        value: /etc/secrets/ed25519_public.pem
+      - key: TSA_URL
+        value: https://freetsa.org/tsr
+
+  # --- Seal + anchor cron job ---------------------------------------------
+  - type: cron
+    name: attest-seal-anchor
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    schedule: "*/5 * * * *"
+    dockerCommand: python scripts/seal_and_anchor.py
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: attest-db
+          property: connectionString
+      - key: SIGNING_BACKEND
+        value: local
+      - key: SIGNING_PRIVATE_KEY_PATH
+        value: /etc/secrets/ed25519_private.pem
+      - key: SIGNING_PUBLIC_KEY_PATH
+        value: /etc/secrets/ed25519_public.pem
+      - key: TSA_URL
+        value: https://freetsa.org/tsr

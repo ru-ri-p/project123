@@ -9,7 +9,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from sdk.attest import AttestClient
+from attest_sdk.attest import AttestClient
 
 API_KEY = "org_demo_key"
 BASE_URL = "http://127.0.0.1:8000"

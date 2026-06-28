@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sdk.policy.types import FeatureVector
+from .types import FeatureVector
 
 
 class PolicyEngineError(ValueError):

@@ -4,11 +4,15 @@ Runtime governance and tamper-evident provenance control plane for AI workflows 
 
 ## Design-partner pilot (TradeEasy)
 
-Implementing the provenance pilot? Start here:
+**Recommended (hosted) model** — the Attest team runs the service; the partner installs only the SDK:
+- **[docs/HOSTING_SETUP.md](docs/HOSTING_SETUP.md)** — provider side: stand up the public service on Render once.
+- **[docs/TRADEEASY_QUICKSTART.md](docs/TRADEEASY_QUICKSTART.md)** — partner side: `pip install` + two calls + a self-test.
+- [attest_sdk/README.md](attest_sdk/README.md) — the SDK package reference.
 
-- **[docs/PILOT_RUNBOOK.md](docs/PILOT_RUNBOOK.md)** — the A-to-Z, step-by-step implementation runbook (Render deploy → SDK integration → acceptance test).
-- [docs/PILOT_TRADEEASY.md](docs/PILOT_TRADEEASY.md) — technical reference (architecture, config, SDK details).
-- [docs/PILOT_SCOPE_NOTE.md](docs/PILOT_SCOPE_NOTE.md) — partner-facing note on what the pilot proves and does not prove.
+**Full self-host model** — the partner runs the whole service themselves:
+- [docs/PILOT_RUNBOOK.md](docs/PILOT_RUNBOOK.md) — A-to-Z runbook (Render deploy → SDK → acceptance test).
+- [docs/PILOT_TRADEEASY.md](docs/PILOT_TRADEEASY.md) — technical reference (architecture, config).
+- [docs/PILOT_SCOPE_NOTE.md](docs/PILOT_SCOPE_NOTE.md) — what the pilot proves and does not prove.
 
 ## Phase 1 — Provenance MVP
 
@@ -45,7 +49,7 @@ uvicorn app.main:app --reload
 ### SDK usage
 
 ```python
-from sdk.attest import AttestClient
+from attest_sdk import AttestClient
 
 w = AttestClient(api_key="org_demo_key")
 t = w.new_trace()
@@ -57,7 +61,7 @@ w.record_event(t, 1, "model_completion", {"prompt": "Summarise Q1 market", "outp
 ```bash
 pytest
 ruff check .
-mypy app scripts tests sdk
+mypy app scripts tests attest_sdk
 ```
 
 ### Seal and anchor batches (Week 3)
@@ -164,7 +168,7 @@ curl -X POST -H "x-api-key: org_demo_key" -H "Content-Type: application/json" \
 Tiers: **green** (ok) → **yellow** (flag) → **orange** (PII / elevated risk, approval queued) → **red** (blocked under `deny_on_error`, approval queued).
 
 ```python
-from sdk.attest import AttestClient
+from attest_sdk import AttestClient
 
 w = AttestClient(api_key="org_demo_key")
 t = w.new_trace()
@@ -208,7 +212,7 @@ python scripts/demo_enforcement_workflow.py --approve
 Local policy evaluation for green/yellow (microseconds); server escalation for orange/red only.
 
 ```python
-from sdk.attest import AttestClient
+from attest_sdk import AttestClient
 
 client = AttestClient(api_key="org_demo_key", enable_local_precheck=True, enable_buffer=True)
 client.load_policy_bundle()

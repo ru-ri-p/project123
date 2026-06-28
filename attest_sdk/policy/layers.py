@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from sdk.policy.tiers import max_tier
-from sdk.policy.types import FeatureVector, LayerResult
+from .tiers import max_tier
+from .types import FeatureVector, LayerResult
 
 
 def run_deterministic_layers(features: FeatureVector) -> tuple[LayerResult, ...]:

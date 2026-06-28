@@ -14,7 +14,7 @@ import pytest
 import requests
 from fastapi.testclient import TestClient
 
-from sdk.attest import AttestClient
+from attest_sdk.attest import AttestClient
 
 ROOT = Path(__file__).resolve().parents[1]
 API_KEY = "org_demo_key"
@@ -61,8 +61,8 @@ def api_base(db_available: bool) -> Generator[str, None, None]:
         return _MockResponse(tc.get(path, headers=kwargs.get("headers")))
 
     with (
-        patch("sdk.attest.requests.post", side_effect=post),
-        patch("sdk.attest.requests.get", side_effect=get),
+        patch("attest_sdk.attest.requests.post", side_effect=post),
+        patch("attest_sdk.attest.requests.get", side_effect=get),
     ):
         yield BASE
 

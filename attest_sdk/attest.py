@@ -7,9 +7,9 @@ from typing import Any
 
 import requests
 
-from sdk.buffer import AsyncFlushBuffer, FlushItem
-from sdk.policy.bundle import PolicyBundle
-from sdk.policy.evaluator import needs_server_escalation
+from .buffer import AsyncFlushBuffer, FlushItem
+from .policy.bundle import PolicyBundle
+from .policy.evaluator import needs_server_escalation
 
 DEFAULT_SERVER_TIMEOUT = 5.0
 ESCALATION_SERVER_TIMEOUT = 30.0
@@ -132,7 +132,7 @@ class AttestClient:
         use_buffer = self.enable_buffer if buffered is None else buffered
         self._trace_seq[trace_id] = max(self._trace_seq.get(trace_id, 0), seq)
 
-        body = {
+        body: dict[str, Any] = {
             "trace_id": trace_id,
             "seq": seq,
             "type": event_type,

@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from sdk.policy.features import extract_features
-from sdk.policy.layers import layer_floor_tier, run_deterministic_layers
-from sdk.policy.rules import PolicyEngineError, rule_matches
-from sdk.policy.tiers import TIERS, max_tier
-from sdk.policy.types import FeatureVector, LocalEvaluation, PolicyDecision, RiskTier
+from .features import extract_features
+from .layers import layer_floor_tier, run_deterministic_layers
+from .rules import PolicyEngineError, rule_matches
+from .tiers import TIERS, max_tier
+from .types import FeatureVector, LocalEvaluation, PolicyDecision, RiskTier
 
 TIER_SCORE: dict[str, int] = {
     "green": 10,
@@ -131,7 +131,7 @@ def _decision_allowed(tier: RiskTier, decision: PolicyDecision, *, fail_mode: st
     return True
 
 
-def _layer_reasons(layers: tuple) -> tuple[str, ...]:
+def _layer_reasons(layers: tuple[Any, ...]) -> tuple[str, ...]:
     reasons: list[str] = []
     for layer in layers:
         reasons.extend(layer.reasons)

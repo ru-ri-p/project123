@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from sdk.policy.defaults import DEFAULT_POLICY_RULES
-from sdk.policy.evaluator import evaluate_local
-from sdk.policy.types import LocalEvaluation
+from .defaults import DEFAULT_POLICY_RULES
+from .evaluator import evaluate_local
+from .types import LocalEvaluation
 
 
 class PolicyBundle:

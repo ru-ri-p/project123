@@ -36,7 +36,7 @@ def main() -> None:
     health.raise_for_status()
     print(f"API health: {health.json()}")
 
-    from sdk.attest import AttestClient
+    from attest_sdk.attest import AttestClient
 
     client = AttestClient(api_key=API_KEY, base_url=BASE_URL)
     trace_id = client.new_trace()

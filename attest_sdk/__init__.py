@@ -1,7 +1,7 @@
 """Attest Python SDK — customer-facing library."""
 
-from sdk.policy import LocalEvaluation, PolicyBundle, evaluate_local
-from sdk.attest import AttestClient
+from .attest import AttestClient
+from .policy import LocalEvaluation, PolicyBundle, evaluate_local
 
 __all__ = [
     "AttestClient",

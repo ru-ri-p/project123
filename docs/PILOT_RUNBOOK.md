@@ -1,5 +1,13 @@
 # Attest Provenance Pilot — A-to-Z Implementation Runbook (TradeEasy)
 
+> **Two ways to run this pilot:**
+> - **(A) Hosted (recommended, lightest for TradeEasy)** — the Attest team runs
+>   the service; TradeEasy installs only the SDK and adds two calls. See
+>   [HOSTING_SETUP.md](HOSTING_SETUP.md) (provider side) and
+>   [TRADEEASY_QUICKSTART.md](TRADEEASY_QUICKSTART.md) (TradeEasy side).
+> - **(B) Full self-host (this runbook)** — TradeEasy runs the whole service on
+>   their own Render account. Use this only if they must hold the keys/data.
+
 Follow these steps in order. Each step lists **who** does it, the **action**, the
 **commands**, and the **expected result** so you know it worked. Everything runs
 on TradeEasy's Render account; no AWS, no customer data, nothing on Attest's
@@ -165,18 +173,18 @@ DATABASE_URL="<attest-db EXTERNAL connection string>" \
 
 ## 9. Integrate the SDK into the TradeEasy backend `[TE]`
 
-The SDK is plain Python and needs only `requests`. Vendor it into the backend:
+The SDK is an installable package (only needs `requests`):
 
 ```bash
-cp -r sdk/ /path/to/tradeeasy-backend/attest_sdk/   # copy the sdk/ folder
-pip install requests                                # in the backend's env
+pip install attest_sdk-0.1.0-py3-none-any.whl     # wheel from `python -m build`
+# or: pip install "git+<repo-url>@claude/zealous-archimedes-8i4x3i"
 ```
 
 Instrument the AI workflow — **one trace per transaction** (one AI-synthesized
 output), one `record_event` per step:
 
 ```python
-from attest_sdk.attest import AttestClient
+from attest_sdk import AttestClient
 
 attest = AttestClient(
     api_key="<THE_KEY>",                 # from step 8

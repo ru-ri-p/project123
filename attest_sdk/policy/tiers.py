@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sdk.policy.types import RiskTier
+from .types import RiskTier
 
 TIER_RANK: dict[str, int] = {
     "green": 0,
