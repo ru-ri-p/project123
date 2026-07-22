@@ -14,12 +14,18 @@ EventType = Literal[
     "mitigation",
     "erasure",
 ]
+# EventType lists the STANDARD event types (some trigger special server behaviour).
+# Custom event types are allowed — the `type` field below accepts any non-empty
+# string so a customer can record actions in their own vocabulary.
 
 
 class EventIn(BaseModel):
     trace_id: str
     seq: int = Field(ge=1)
-    type: EventType
+    type: str = Field(
+        min_length=1,
+        description="Event type; standard values recommended, custom labels allowed.",
+    )
     payload: dict[str, Any]
     policy_version: str | None = None
 

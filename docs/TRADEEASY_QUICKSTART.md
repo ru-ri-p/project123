@@ -37,9 +37,10 @@ def on_ai_transaction(txn):
     attest.record_event(trace, 3, "model_completion", {"action": "finalize", "output": txn.final})
 ```
 
-Rules: `seq` starts at 1 and is strictly increasing per trace; `event_type` is one
-of `model_completion | tool_call | policy_decision | approval_action | mitigation
-| erasure`; `payload` is any JSON dict.
+Rules: `seq` starts at 1 and is strictly increasing per trace; `event_type` is any
+non-empty label (standard values `model_completion | tool_call | policy_decision |
+approval_action | mitigation | erasure`, or a custom one like `risk_assessment`);
+`payload` is any JSON dict.
 
 Not using Python? Call the API directly:
 `POST {URL}/v1/event` with header `x-api-key` and body

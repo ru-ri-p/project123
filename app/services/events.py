@@ -11,7 +11,6 @@ from sqlalchemy.orm import Session
 from app.crypto.algorithms import DEFAULT_ALGORITHM
 from app.crypto.canonical import sha256_hex
 from app.crypto.signing_provider import sign_message_hex
-from app.db.models import EVENT_TYPES
 from app.repositories import events as event_repo
 from app.schemas import EventOut
 from app.services.envelope import build_envelope, now_utc_iso
@@ -23,7 +22,8 @@ class EventSequenceError(ValueError):
 
 
 class InvalidEventTypeError(ValueError):
-    """Raised when event type is not in the allowed set."""
+    """Raised when event type is empty. Any non-empty label is accepted; the
+    standard types (app.db.models.EVENT_TYPES) are recommended, not required."""
 
 
 def record_event(
@@ -36,8 +36,10 @@ def record_event(
     payload: dict[str, Any],
     policy_version: str | None,
 ) -> EventOut:
-    if event_type not in EVENT_TYPES:
-        msg = f"invalid event type: {event_type}"
+    # Accept any non-empty event type — customers record actions in their own
+    # vocabulary. The standard types are recommended but not enforced.
+    if not event_type or not event_type.strip():
+        msg = "event type must be a non-empty string"
         raise InvalidEventTypeError(msg)
 
     event_repo.get_or_create_trace(db, org_id, trace_id, policy_version)

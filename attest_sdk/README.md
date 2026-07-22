@@ -39,8 +39,10 @@ attest.record_event(trace, 3, "model_completion", {"action": "finalize", "output
 
 Rules:
 - `seq` is **strictly monotonic per trace, starting at 1** (out-of-order is rejected).
-- `event_type` is one of:
-  `model_completion | tool_call | policy_decision | approval_action | mitigation | erasure`.
+- `event_type` is any non-empty label. These standard values are recommended
+  (some trigger special server behaviour):
+  `model_completion | tool_call | policy_decision | approval_action | mitigation | erasure`
+  — but custom labels (e.g. `risk_assessment`) are accepted too.
 - The `payload` is any JSON-serializable dict describing what happened.
 - Recording is meant to run alongside your workflow; it does not change your
   output. (Set `enable_buffer=True` to send in a background thread so it never

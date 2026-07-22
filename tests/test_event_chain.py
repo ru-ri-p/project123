@@ -100,6 +100,36 @@ def test_out_of_order_seq_rejected(client: TestClient) -> None:
     assert "out-of-order seq" in response.json()["detail"]
 
 
+def test_custom_event_type_is_accepted(client: TestClient) -> None:
+    # A non-standard type (e.g. TradeEasy's "risk_assessment") records fine —
+    # the type field accepts any non-empty label, not just the six standard ones.
+    trace_id = str(uuid.uuid4())
+    response = client.post(
+        "/v1/event",
+        headers=_headers(),
+        json={
+            "trace_id": trace_id,
+            "seq": 1,
+            "type": "risk_assessment",
+            "payload": {"score": 0.2, "result": "low"},
+        },
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["hash"]
+
+    replay = client.get(f"/v1/trace/{trace_id}/replay", headers=_headers())
+    assert replay.json()["all_verified"] is True
+
+
+def test_empty_event_type_is_rejected(client: TestClient) -> None:
+    response = client.post(
+        "/v1/event",
+        headers=_headers(),
+        json={"trace_id": str(uuid.uuid4()), "seq": 1, "type": "", "payload": {}},
+    )
+    assert response.status_code == 422  # Pydantic min_length rejects empty
+
+
 def test_invalid_api_key_returns_401(client: TestClient) -> None:
     response = client.post(
         "/v1/event",
