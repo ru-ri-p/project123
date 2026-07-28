@@ -191,6 +191,57 @@ class PrecheckOut(BaseModel):
     mitigations: list[str] = Field(default_factory=list)
 
 
+class ConfidentialityIn(BaseModel):
+    wrapping_public_pem: str = Field(min_length=1)
+
+
+class SigningKeyOut(BaseModel):
+    key_id: str
+    public_pem: str
+
+
+class AccessRequestCreateIn(BaseModel):
+    org_id: str
+    payload_hashes: list[str] = Field(min_length=1)
+    reason: str = Field(min_length=1)
+    required_approvals: int = Field(default=1, ge=1)
+    ttl_seconds: int = Field(default=3600, ge=1)
+
+
+class AccessRequestOut(BaseModel):
+    request_id: str
+    org_id: str
+    status: str
+    reason: str
+    required_approvals: int
+    approvals: int = 0
+    grantee_public_pem: str
+    expires_at: str
+
+
+class AccessScopeItem(BaseModel):
+    payload_hash: str
+    wrapped_key_for_org: str | None = None
+
+
+class AccessRequestDetailOut(AccessRequestOut):
+    scope: list[AccessScopeItem]
+
+
+class AccessApproveIn(BaseModel):
+    approver_id: str = Field(min_length=1)
+    released_keys: dict[str, str] = Field(default_factory=dict)
+
+
+class AccessResolveIn(BaseModel):
+    status: Literal["denied", "revoked"]
+
+
+class GrantRecordOut(BaseModel):
+    payload_hash: str
+    content: dict[str, Any]
+
+
 class PolicyOut(BaseModel):
     id: str
     org_id: str

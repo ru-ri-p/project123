@@ -6,7 +6,16 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import (
+    DateTime,
+    ForeignKey,
+    ForeignKeyConstraint,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -176,8 +185,12 @@ class Payload(Base):
 
     __tablename__ = "payloads"
 
+    # Composite PK: the same content hash can legitimately recur across orgs, so
+    # a record is identified by (org_id, payload_hash), never the hash alone.
+    org_id: Mapped[str] = mapped_column(
+        Text, ForeignKey("orgs.id"), primary_key=True, index=True
+    )
     payload_hash: Mapped[str] = mapped_column(Text, primary_key=True)
-    org_id: Mapped[str] = mapped_column(Text, ForeignKey("orgs.id"), nullable=False, index=True)
     encrypted_blob: Mapped[str] = mapped_column(Text, nullable=False)
     # Content-encryption suite for this blob; lets the read path dispatch and
     # supports migrating the cipher without losing older records.
@@ -195,11 +208,19 @@ class PayloadKey(Base):
     """Per-record encryption key — deleting this row crypto-shreds the payload."""
 
     __tablename__ = "payload_keys"
-
-    payload_hash: Mapped[str] = mapped_column(
-        Text, ForeignKey("payloads.payload_hash"), primary_key=True
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["org_id", "payload_hash"],
+            ["payloads.org_id", "payloads.payload_hash"],
+            name="payload_keys_payload_fkey",
+        ),
     )
-    org_id: Mapped[str] = mapped_column(Text, ForeignKey("orgs.id"), nullable=False, index=True)
+
+    # Composite PK mirrors payloads: one key row per (org_id, payload_hash).
+    org_id: Mapped[str] = mapped_column(
+        Text, ForeignKey("orgs.id"), primary_key=True, index=True
+    )
+    payload_hash: Mapped[str] = mapped_column(Text, primary_key=True)
     # base64 of the content key (DEK). If wrap_alg is NULL the DEK is stored as-is
     # (attest_managed). If wrap_alg is set, key_b64 is the DEK WRAPPED to the org's
     # public key — Attest cannot unwrap it, so the content is dark.

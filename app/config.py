@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     rate_limit_max_requests: int = 120
     rate_limit_window_seconds: int = 60
     cors_origins: str = "http://localhost:3000"
+    # Attest-ops admin key for the access-review console endpoints. Unset = the
+    # admin API is disabled (endpoints return 503).
+    admin_api_key: str | None = None
 
 
 @lru_cache

@@ -135,6 +135,100 @@ def resolve_access_request(db: Session, *, request_id: uuid.UUID, status: str) -
     return request
 
 
+def get_access_request(db: Session, request_id: uuid.UUID) -> AccessRequest | None:
+    return db.get(AccessRequest, request_id)
+
+
+def list_access_requests(
+    db: Session, org_id: str, status: str | None = None
+) -> list[AccessRequest]:
+    query = db.query(AccessRequest).filter(AccessRequest.org_id == org_id)
+    if status is not None:
+        query = query.filter(AccessRequest.status == status)
+    return query.order_by(AccessRequest.created_at.desc()).all()
+
+
+def approvals_count(db: Session, request_id: uuid.UUID) -> int:
+    return db.query(AccessApproval).filter(AccessApproval.request_id == request_id).count()
+
+
+def request_scope(db: Session, request_id: uuid.UUID) -> list[dict[str, str | None]]:
+    """For the org's client: each in-scope record's ORG-wrapped content key, which
+    the client unwraps with its private key and re-wraps to the grantee (approval)."""
+    request = db.get(AccessRequest, request_id)
+    if request is None:
+        return []
+    items = db.query(AccessGrantKey).filter(AccessGrantKey.request_id == request_id).all()
+    scope: list[dict[str, str | None]] = []
+    for item in items:
+        key_row = (
+            db.query(PayloadKey)
+            .filter(
+                PayloadKey.org_id == request.org_id,
+                PayloadKey.payload_hash == item.payload_hash,
+            )
+            .one_or_none()
+        )
+        wrapped_for_org = key_row.key_b64 if key_row is not None and key_row.wrap_alg else None
+        scope.append({"payload_hash": item.payload_hash, "wrapped_key_for_org": wrapped_for_org})
+    return scope
+
+
+def record_client_approval(
+    db: Session,
+    *,
+    request_id: uuid.UUID,
+    approver_id: str,
+    released_keys: dict[str, str],
+) -> AccessRequest:
+    """Client-side approval: the org (in its own environment) re-wrapped the
+    in-scope content keys to the grantee key and posts them here. We record the
+    approval, store the released keys, and approve once the threshold is met and
+    every in-scope record has a released key. Attest never sees the org's key."""
+    request = db.get(AccessRequest, request_id)
+    if request is None:
+        msg = f"access request not found: {request_id}"
+        raise AccessReviewError(msg)
+    if request.status != "pending":
+        return request
+
+    existing = (
+        db.query(AccessApproval)
+        .filter(AccessApproval.request_id == request_id, AccessApproval.approver_id == approver_id)
+        .one_or_none()
+    )
+    if existing is None:
+        db.add(AccessApproval(request_id=request_id, approver_id=approver_id))
+        db.flush()
+
+    scope_hashes = {
+        item.payload_hash
+        for item in db.query(AccessGrantKey).filter(AccessGrantKey.request_id == request_id).all()
+    }
+    for payload_hash, wrapped in released_keys.items():
+        if payload_hash in scope_hashes:
+            item = (
+                db.query(AccessGrantKey)
+                .filter(
+                    AccessGrantKey.request_id == request_id,
+                    AccessGrantKey.payload_hash == payload_hash,
+                )
+                .one()
+            )
+            item.wrapped_key_b64 = wrapped
+    db.flush()
+
+    unreleased = (
+        db.query(AccessGrantKey)
+        .filter(AccessGrantKey.request_id == request_id, AccessGrantKey.wrapped_key_b64.is_(None))
+        .count()
+    )
+    if approvals_count(db, request_id) >= request.required_approvals and unreleased == 0:
+        request.status = "approved"
+        db.flush()
+    return request
+
+
 def read_via_grant(
     db: Session, *, request_id: uuid.UUID, payload_hash: str
 ) -> dict[str, Any] | None:

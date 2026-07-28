@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.access import router as access_router
 from app.api.approvals import router as approvals_router
 from app.api.erasure import router as erasure_router
 from app.api.events import router as events_router
@@ -35,6 +36,7 @@ app.include_router(approvals_router)
 app.include_router(precheck_router)
 app.include_router(policies_router)
 app.include_router(mitigations_router)
+app.include_router(access_router)
 
 
 @app.get("/health")
