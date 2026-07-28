@@ -71,6 +71,19 @@ def create_org_with_api_key(
     return org, plaintext_key
 
 
+def enable_customer_key_mode(db: Session, org_id: str, wrapping_public_pem: bytes) -> Org:
+    """Switch an org to customer-key confidentiality: new content is wrapped to
+    this public key and becomes dark to Attest. The org keeps the private key."""
+    org = org_repo.get_org_by_id(db, org_id)
+    if org is None:
+        msg = f"org not found: {org_id}"
+        raise LookupError(msg)
+    org.confidentiality_mode = "customer_key"
+    org.wrapping_public_pem = wrapping_public_pem.decode("utf-8")
+    db.flush()
+    return org
+
+
 def update_org_settings(
     db: Session,
     org_id: str,

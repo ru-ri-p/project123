@@ -36,6 +36,15 @@ class Org(Base):
     fail_mode: Mapped[str] = mapped_column(
         String(32), nullable=False, server_default="deny_on_error"
     )
+    # Confidentiality: "attest_managed" (Attest can read stored content) or
+    # "customer_key" (content keys are wrapped to wrapping_public_pem, so stored
+    # content is dark to Attest until the org releases a key via consent).
+    confidentiality_mode: Mapped[str] = mapped_column(
+        String(32), nullable=False, server_default="attest_managed"
+    )
+    # Org's PUBLIC wrapping key (PEM). Attest holds only this; the private key
+    # stays in the org's custody. Required for confidentiality_mode=customer_key.
+    wrapping_public_pem: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
@@ -186,4 +195,8 @@ class PayloadKey(Base):
         Text, ForeignKey("payloads.payload_hash"), primary_key=True
     )
     org_id: Mapped[str] = mapped_column(Text, ForeignKey("orgs.id"), nullable=False, index=True)
+    # base64 of the content key (DEK). If wrap_alg is NULL the DEK is stored as-is
+    # (attest_managed). If wrap_alg is set, key_b64 is the DEK WRAPPED to the org's
+    # public key — Attest cannot unwrap it, so the content is dark.
     key_b64: Mapped[str] = mapped_column(Text, nullable=False)
+    wrap_alg: Mapped[str | None] = mapped_column(Text, nullable=True)
