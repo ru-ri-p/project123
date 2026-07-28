@@ -200,3 +200,58 @@ class PayloadKey(Base):
     # public key — Attest cannot unwrap it, so the content is dark.
     key_b64: Mapped[str] = mapped_column(Text, nullable=False)
     wrap_alg: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class AccessRequest(Base):
+    """Attest's request to view a scoped set of a customer-key org's records.
+
+    The org approves (1 or M-of-N) and releases keys for exactly the scope. The
+    grantee keypair is ephemeral, generated per request; the org only ever
+    re-wraps content keys to grantee_public_pem, never exposes its master key.
+    """
+
+    __tablename__ = "access_requests"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    org_id: Mapped[str] = mapped_column(Text, ForeignKey("orgs.id"), nullable=False, index=True)
+    requested_by: Mapped[str] = mapped_column(Text, nullable=False)  # Attest operator
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, server_default="pending")
+    required_approvals: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
+    grantee_public_pem: Mapped[str] = mapped_column(Text, nullable=False)
+    grantee_private_pem: Mapped[str] = mapped_column(Text, nullable=False)  # Attest's ephemeral key
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class AccessApproval(Base):
+    """One officer's approval of an access request (M-of-N counts these rows)."""
+
+    __tablename__ = "access_approvals"
+    __table_args__ = (
+        UniqueConstraint("request_id", "approver_id", name="uq_access_approval_request_approver"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    request_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("access_requests.id"), nullable=False, index=True
+    )
+    approver_id: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class AccessGrantKey(Base):
+    """Scope + released key for one record in a request. wrapped_key_b64 is NULL
+    until approval, then holds the record's content key re-wrapped to the grantee."""
+
+    __tablename__ = "access_grant_keys"
+
+    request_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("access_requests.id"), primary_key=True
+    )
+    payload_hash: Mapped[str] = mapped_column(Text, primary_key=True)
+    wrapped_key_b64: Mapped[str | None] = mapped_column(Text, nullable=True)
