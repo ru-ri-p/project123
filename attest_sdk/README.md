@@ -69,6 +69,69 @@ r = requests.get(f"{BASE_URL}/v1/trace/{trace}/replay", headers={"x-api-key": AP
 print(r.json()["all_verified"])   # -> True  (your events are recorded and verifiable)
 ```
 
+## Keeping your content dark to Attest (customer-key mode)
+
+By default Attest can read the payloads it stores for you. If you'd rather Attest
+hold your content but **not be able to open it**, switch to *customer-key mode*:
+you generate a wrapping keypair, keep the private key, and give Attest only the
+public key. From then on every payload is encrypted under a key Attest can lock
+but not unlock — dark at rest.
+
+If Attest ever needs to see a specific record (a dispute, an audit), it files a
+**scoped access request**. Nothing is visible until *you* approve, and approving
+releases only the exact records in that request — never your master key, never
+anything else. This is the consent ceremony, and the SDK ships both a client and
+a CLI for the org side of it.
+
+Install the crypto extra (adds `cryptography`; the base client stays `requests`-only):
+
+```bash
+pip install "attest-sdk[consent]"
+```
+
+### CLI (no code)
+
+```bash
+export ATTEST_BASE_URL="https://your-attest-service.example.com"
+export ATTEST_API_KEY="YOUR_API_KEY"
+
+# 1. Generate a keypair (private key is written 0600 — keep it secret).
+python -m attest_sdk.consent_cli keygen --out-private org_priv.pem --out-public org_pub.pem
+
+# 2. Go dark: register the PUBLIC key only.
+python -m attest_sdk.consent_cli enable --public org_pub.pem
+
+# 3. See what Attest is asking to view.
+python -m attest_sdk.consent_cli list --status pending
+python -m attest_sdk.consent_cli show --request-id <REQUEST_ID>
+
+# 4. Approve — re-wraps only the in-scope keys, locally, using the private key.
+python -m attest_sdk.consent_cli approve --request-id <REQUEST_ID> \
+    --approver officer_1 --private org_priv.pem
+
+# ...or refuse.
+python -m attest_sdk.consent_cli deny --request-id <REQUEST_ID>
+```
+
+### Client (in code)
+
+```python
+from attest_sdk import ConsentClient
+from attest_sdk.orgcrypto import generate_wrapping_keypair
+
+org = ConsentClient(api_key="YOUR_API_KEY", base_url="https://your-attest-service.example.com")
+
+private_pem, public_pem = generate_wrapping_keypair()   # keep private_pem secret
+org.enable_customer_key(public_pem)                     # now dark at rest
+
+# When Attest files a request, approve exactly its scope:
+for req in org.list_requests(status="pending"):
+    org.approve(req["request_id"], approver_id="officer_1", org_private_pem=private_pem)
+```
+
+The private key is used only inside `approve()` / the `approve` CLI command, on
+your machine. It is never sent to Attest.
+
 ## Not using Python?
 
 Call the HTTP API directly — same contract:
