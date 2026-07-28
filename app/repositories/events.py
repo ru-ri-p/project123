@@ -97,6 +97,7 @@ def insert_event(
     policy_version: str | None,
     alg: str,
     created_at: datetime,
+    signing_key_id: uuid.UUID | None = None,
 ) -> Event:
     event = Event(
         org_id=org_id,
@@ -110,6 +111,7 @@ def insert_event(
         signature=signature,
         policy_version=policy_version,
         alg=alg,
+        signing_key_id=signing_key_id,
         created_at=created_at,
     )
     db.add(event)

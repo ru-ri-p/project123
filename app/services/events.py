@@ -10,10 +10,10 @@ from sqlalchemy.orm import Session
 
 from app.crypto.algorithms import DEFAULT_ALGORITHM
 from app.crypto.canonical import sha256_hex
-from app.crypto.signing_provider import sign_message_hex
 from app.repositories import events as event_repo
 from app.schemas import EventOut
 from app.services.envelope import build_envelope, now_utc_iso
+from app.services.org_signing import sign_event_for_org
 from app.services.pii import redact_payload
 
 
@@ -68,7 +68,7 @@ def record_event(
         alg=alg,
     )
     event_hash = sha256_hex(envelope)
-    signature = sign_message_hex(event_hash)
+    signature, signing_key_id = sign_event_for_org(db, org_id, event_hash)
 
     event_repo.store_encrypted_payload(
         db,
@@ -90,6 +90,7 @@ def record_event(
         signature=signature,
         policy_version=policy_version,
         alg=alg,
+        signing_key_id=signing_key_id,
         created_at=created_at.replace(tzinfo=UTC),
     )
 

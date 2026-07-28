@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -83,14 +83,21 @@ def verify_event_chain(
     trace_id: str,
     events: Sequence[VerifiableEvent],
     *,
-    public_pem: bytes,
+    public_pem: bytes | None = None,
+    resolve_public_pem: Callable[[VerifiableEvent], bytes] | None = None,
 ) -> TraceReplayResult:
+    """Verify a trace. Pass a single `public_pem`, or `resolve_public_pem` to pick
+    the right key per event (per-org signing keys)."""
     results: list[EventVerifyResult] = []
     prev_hash: str | None = None
     all_ok = True
 
     for event in events:
-        result = verify_single_event(event, public_pem=public_pem, expected_prev_hash=prev_hash)
+        pem = resolve_public_pem(event) if resolve_public_pem is not None else public_pem
+        if pem is None:
+            msg = "no public key provided for verification"
+            raise ValueError(msg)
+        result = verify_single_event(event, public_pem=pem, expected_prev_hash=prev_hash)
         all_ok = all_ok and result.verified
         results.append(result)
         prev_hash = event.hash

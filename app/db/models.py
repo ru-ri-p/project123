@@ -108,6 +108,11 @@ class Event(Base):
     # Algorithm suite used to hash+sign this event (also stored inside the
     # signed envelope). Lets the verifier dispatch on it for crypto-agility.
     alg: Mapped[str] = mapped_column(Text, nullable=False, server_default=DEFAULT_ALGORITHM)
+    # Which per-org signing key signed this event. NULL = the global service key
+    # (backward compatible with events signed before per-org keys existed).
+    signing_key_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("org_signing_keys.key_id"), nullable=True
+    )
     policy_version: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
@@ -255,3 +260,23 @@ class AccessGrantKey(Base):
     )
     payload_hash: Mapped[str] = mapped_column(Text, primary_key=True)
     wrapped_key_b64: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class OrgSigningKey(Base):
+    """A per-org signing key. The 'active' key signs new events; retired keys keep
+    verifying the events they signed (the key-id is recorded on each event).
+    private_pem is NULL for customer-controlled keys (signing happens org-side)."""
+
+    __tablename__ = "org_signing_keys"
+
+    key_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    org_id: Mapped[str] = mapped_column(Text, ForeignKey("orgs.id"), nullable=False, index=True)
+    alg: Mapped[str] = mapped_column(Text, nullable=False, server_default=DEFAULT_ALGORITHM)
+    public_pem: Mapped[str] = mapped_column(Text, nullable=False)
+    private_pem: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, server_default="active")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
