@@ -1,0 +1,70 @@
+# Mirror main to the deploy repo.
+#
+# Development happens in this repo (shaundytradesfx/govproject01), but Render's
+# attest-api service deploys from ru-ri-p/project123. Without a mirror the two
+# drift apart and Render silently keeps serving stale code — which is exactly
+# what happened before this workflow existed.
+#
+# Requires a repository secret named MIRROR_TOKEN: a GitHub token with
+# Contents: write on ru-ri-p/project123. See docs/DEPLOY_MIRROR.md for setup.
+
+name: Mirror main to deploy repo
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}   # lets you mirror on demand from the Actions tab
+
+# One mirror at a time; never let two runs race to push the same branch.
+concurrency:
+  group: mirror-to-deploy-repo
+  cancel-in-progress: false
+
+env:
+  DEPLOY_REPO: ru-ri-p/project123
+  DEPLOY_BRANCH: main
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out full history
+        uses: actions/checkout@v4
+        with:
+          # A shallow clone cannot be pushed to a different repository.
+          fetch-depth: 0
+
+      - name: Push main to the deploy repo
+        env:
+          MIRROR_TOKEN: ${{ secrets.MIRROR_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${MIRROR_TOKEN:-}" ]; then
+            echo "::error::MIRROR_TOKEN secret is not set."
+            echo "Add it under Settings -> Secrets and variables -> Actions."
+            echo "See docs/DEPLOY_MIRROR.md for how to create the token."
+            exit 1
+          fi
+
+          # The token is a registered secret, so Actions masks it in the logs.
+          REMOTE="https://x-access-token:${MIRROR_TOKEN}@github.com/${DEPLOY_REPO}.git"
+
+          echo "Mirroring $(git rev-parse --short HEAD) -> ${DEPLOY_REPO}@${DEPLOY_BRANCH}"
+
+          # Deliberately NOT a force push. If the deploy repo has commits we
+          # don't have, we want a loud failure rather than destroying them.
+          if git push "${REMOTE}" "HEAD:${DEPLOY_BRANCH}"; then
+            echo "Mirrored successfully."
+          else
+            echo "::error::Push rejected — ${DEPLOY_REPO}@${DEPLOY_BRANCH} has commits that are not in this repo."
+            echo "Reconcile the two histories by hand; see docs/DEPLOY_MIRROR.md (Divergence)."
+            exit 1
+          fi
+
+      - name: Reminder
+        run: |
+          echo "Code is mirrored. Render has autoDeploy disabled, so finish in the"
+          echo "Render dashboard: attest-api -> Manual Deploy -> Deploy latest commit."
