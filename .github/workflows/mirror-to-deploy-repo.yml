@@ -54,13 +54,34 @@ jobs:
 
           echo "Mirroring $(git rev-parse --short HEAD) -> ${DEPLOY_REPO}@${DEPLOY_BRANCH}"
 
+          # Check reachability first, so a credentials problem is never reported
+          # as a history problem. GitHub answers "not found" (not "forbidden")
+          # for private repos a token cannot see, so the two look alike here but
+          # have completely different fixes.
+          if ! git ls-remote "${REMOTE}" >/dev/null 2>&1; then
+            echo "::error::MIRROR_TOKEN cannot reach ${DEPLOY_REPO}."
+            echo "GitHub reports 'not found' rather than 'forbidden' for a private repo the"
+            echo "token cannot see, so this is almost always token scope — not a missing repo."
+            echo "Verify, in order:"
+            echo "  1. The token's Resource owner is the account that OWNS ${DEPLOY_REPO}."
+            echo "     A fine-grained token cannot reach another personal account's repo,"
+            echo "     even if you are a collaborator on it."
+            echo "  2. Repository access lists that repository."
+            echo "  3. Repository permissions include Contents: Read and write."
+            echo "  4. The token has not expired."
+            echo "See docs/DEPLOY_MIRROR.md (Failure modes)."
+            exit 1
+          fi
+
           # Deliberately NOT a force push. If the deploy repo has commits we
           # don't have, we want a loud failure rather than destroying them.
           if git push "${REMOTE}" "HEAD:${DEPLOY_BRANCH}"; then
             echo "Mirrored successfully."
           else
-            echo "::error::Push rejected — ${DEPLOY_REPO}@${DEPLOY_BRANCH} has commits that are not in this repo."
-            echo "Reconcile the two histories by hand; see docs/DEPLOY_MIRROR.md (Divergence)."
+            echo "::error::Push to ${DEPLOY_REPO}@${DEPLOY_BRANCH} was rejected."
+            echo "The repo is reachable, so this is most likely divergence — it has commits"
+            echo "that are not in this repo — or the token lacks Contents: write."
+            echo "See docs/DEPLOY_MIRROR.md (Divergence)."
             exit 1
           fi
 

@@ -76,8 +76,38 @@ curl -i https://attest-api-ipvl.onrender.com/v1/access-requests
 something else. It must be exactly `MIRROR_TOKEN`, on the repository (not an
 environment).
 
-**`403` / `Permission denied` on push** — the token lacks *Contents: write*, is
-scoped to the wrong repository, or has expired. Regenerate per step 1.
+**`Repository not found` / `MIRROR_TOKEN cannot reach …`** — this is a *token
+scope* problem, not a missing repository. GitHub deliberately answers `404 not
+found` rather than `403 forbidden` for a private repo a token cannot see, so that
+it does not leak which private repos exist. The usual cause:
+
+> A **fine-grained** token can only reach repositories owned by its **Resource
+> owner**. If `project123` belongs to a *different personal account* than the one
+> you were signed in as when creating the token, that account will not even appear
+> in the Resource owner dropdown — and the resulting token cannot see the repo,
+> even if you are a collaborator on it.
+
+Fixes, cheapest first:
+
+1. **Create the token while signed in as the account that owns the repo**, with
+   that account selected as Resource owner (step 1 above).
+2. **Use a deploy key instead** — see *Alternative: deploy key* below. Scoped to
+   exactly one repository and independent of which account issues it.
+3. **Classic token** from the owning account with the `repo` scope. Works, but
+   grants far more than this job needs; prefer 1 or 2.
+
+Check a token's reach without running the workflow:
+
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  https://api.github.com/repos/ru-ri-p/project123
+# 200 -> the token can see the repo
+# 404 -> it cannot (scope problem, per above)
+```
+
+**`403` / `Permission denied` on push** — the repo is reachable but the token
+lacks *Contents: write*, or it has expired. Regenerate per step 1.
 
 **Divergence — `Push rejected … has commits that are not in this repo`** — someone
 committed directly to `project123`. The mirror deliberately does **not** force
@@ -86,6 +116,25 @@ commits into `govproject01`, merging them into `main`, and re-running the mirror
 Only force push if you are certain the deploy repo holds nothing worth keeping —
 it is purely a build target, so that is usually true, but make it a decision
 rather than a default.
+
+## Alternative: deploy key
+
+If juggling accounts to issue the token is awkward, an SSH **deploy key** avoids
+the question entirely — it is attached to the one repository rather than to a
+user, so whoever administers `project123` can create it without affecting
+anything else.
+
+1. Generate a keypair (no passphrase, since CI must use it unattended):
+   `ssh-keygen -t ed25519 -C attest-deploy-mirror -f mirror_key -N ""`
+2. On `ru-ri-p/project123` → **Settings** → **Deploy keys** → **Add deploy key**:
+   paste `mirror_key.pub`, and tick **Allow write access**.
+3. On `shaundytradesfx/govproject01` → **Settings** → **Secrets and variables** →
+   **Actions**: add the *private* key (`mirror_key`) as `MIRROR_SSH_KEY`.
+4. The workflow needs a small change to load the SSH key and push over `git@`
+   instead of `https://`. Ask and it can be switched over.
+
+Then delete the local `mirror_key` files — the only copies that should persist are
+the deploy key on GitHub and the secret.
 
 ## Longer term
 
