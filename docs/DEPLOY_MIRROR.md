@@ -118,8 +118,16 @@ curl -s -o /dev/null -w "%{http_code}\n" \
 # 404 -> it cannot (scope problem, per above)
 ```
 
-**`403` / `Permission denied` on push** — the repo is reachable but the token
-lacks *Contents: write*, or it has expired. Regenerate per step 1.
+**`Permission to … denied to github-actions[bot]`** — the push used the Actions
+bot's own credential rather than `MIRROR_TOKEN`, and the bot has no access to the
+deploy repo. By default `actions/checkout` saves its credential into git config as
+`http.https://github.com/.extraheader`, which matches *every* github.com URL and
+overrides the token embedded in the push URL. The workflow therefore checks out
+with `persist-credentials: false`; if you ever see this error again, that setting
+has gone missing. Nothing is wrong with the token.
+
+**`403` / `Permission denied` on push (not the bot)** — the repo is reachable but
+the token lacks *Contents: write*, or it has expired. Regenerate per step 1.
 
 **Divergence — `Push rejected … has commits that are not in this repo`** — someone
 committed directly to `project123`. The mirror deliberately does **not** force

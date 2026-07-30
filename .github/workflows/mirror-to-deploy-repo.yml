@@ -35,6 +35,12 @@ jobs:
         with:
           # A shallow clone cannot be pushed to a different repository.
           fetch-depth: 0
+          # Critical for cross-repo pushes. By default checkout stores its own
+          # credential as http.https://github.com/.extraheader, which applies to
+          # every github.com URL and silently overrides the token in our push
+          # URL — the push then authenticates as github-actions[bot], which has
+          # no access to the deploy repo, and fails with a misleading 403/404.
+          persist-credentials: false
 
       - name: Push main to the deploy repo
         env:
@@ -75,13 +81,28 @@ jobs:
 
           # Deliberately NOT a force push. If the deploy repo has commits we
           # don't have, we want a loud failure rather than destroying them.
-          if git push "${REMOTE}" "HEAD:${DEPLOY_BRANCH}"; then
+          #
+          # Classify the failure from git's own output rather than assuming a
+          # cause: an auth problem and a history problem need opposite fixes,
+          # and guessing sends the reader after the wrong one.
+          if push_output=$(git push "${REMOTE}" "HEAD:${DEPLOY_BRANCH}" 2>&1); then
+            echo "${push_output}"
             echo "Mirrored successfully."
           else
-            echo "::error::Push to ${DEPLOY_REPO}@${DEPLOY_BRANCH} was rejected."
-            echo "The repo is reachable, so this is most likely divergence — it has commits"
-            echo "that are not in this repo — or the token lacks Contents: write."
-            echo "See docs/DEPLOY_MIRROR.md (Divergence)."
+            echo "${push_output}"
+            if grep -q 'github-actions\[bot\]' <<<"${push_output}"; then
+              echo "::error::The push authenticated as github-actions[bot], not MIRROR_TOKEN."
+              echo "actions/checkout must run with persist-credentials: false, otherwise its"
+              echo "http.https://github.com/.extraheader overrides the token in the push URL."
+            elif grep -qiE 'denied|403|forbidden' <<<"${push_output}"; then
+              echo "::error::MIRROR_TOKEN can read ${DEPLOY_REPO} but cannot write to it."
+              echo "Give the token 'Contents: Read and write' on that repository."
+            elif grep -qiE 'non-fast-forward|fetch first|behind' <<<"${push_output}"; then
+              echo "::error::${DEPLOY_REPO}@${DEPLOY_BRANCH} has commits that are not in this repo."
+              echo "See docs/DEPLOY_MIRROR.md (Divergence)."
+            else
+              echo "::error::Push to ${DEPLOY_REPO}@${DEPLOY_BRANCH} failed; see the git output above."
+            fi
             exit 1
           fi
 
