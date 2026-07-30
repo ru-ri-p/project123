@@ -21,6 +21,18 @@ nothing looks broken.
 
 ### 1. Create a token that can write to the deploy repo
 
+**You must be signed in as `ru-ri-p` for this step.** `ru-ri-p` is a *personal*
+account, and there is no way around that from another account:
+
+- a fine-grained token cannot select another personal account as Resource owner —
+  it will not even be offered in the dropdown;
+- adding a deploy key requires *admin* on the repository, which on a personal
+  account only the owner holds (collaborators get write, never admin);
+- a classic token is likewise bound to the account that issues it.
+
+It is a one-time sign-in. Afterwards the mirror runs unattended until the token
+expires.
+
 Signed in as **`ru-ri-p`** (the owner of `project123`):
 
 1. GitHub → your avatar → **Settings** → **Developer settings**
@@ -119,10 +131,10 @@ rather than a default.
 
 ## Alternative: deploy key
 
-If juggling accounts to issue the token is awkward, an SSH **deploy key** avoids
-the question entirely — it is attached to the one repository rather than to a
-user, so whoever administers `project123` can create it without affecting
-anything else.
+An SSH **deploy key** attaches to the one repository rather than to a user, which
+keeps its blast radius small and survives the token expiring. Note it does *not*
+avoid the sign-in above: adding a deploy key needs admin on `project123`, so it
+must still be done as `ru-ri-p`.
 
 1. Generate a keypair (no passphrase, since CI must use it unattended):
    `ssh-keygen -t ed25519 -C attest-deploy-mirror -f mirror_key -N ""`
