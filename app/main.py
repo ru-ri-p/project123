@@ -46,11 +46,14 @@ _CONSOLE = Path(__file__).parent / "static" / "console.html"
 
 
 @app.get("/console", include_in_schema=False)
+@app.get("/dashboard", include_in_schema=False)
 def customer_console() -> FileResponse:
     """Self-contained customer console (setup, consent requests, record verification).
 
     A single static page; all key operations run in the visitor's browser via
-    WebCrypto, so private keys never reach this server.
+    WebCrypto, so private keys never reach this server. Served under two paths
+    because "console" made a pilot user reach for the browser DevTools console —
+    "dashboard" is the word customers actually expect.
     """
     return FileResponse(_CONSOLE, media_type="text/html")
 
