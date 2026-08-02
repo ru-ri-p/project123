@@ -12,7 +12,7 @@ def test_unicode_and_arabic_are_stable() -> None:
     h1 = sha256_hex(obj)
     h2 = sha256_hex({"value": 1, "label": ""})
     assert h1 == h2
-    assert "".encode() in canonical_bytes(obj)
+    assert b"" in canonical_bytes(obj)
 
 
 def test_whitespace_is_not_incidental() -> None:

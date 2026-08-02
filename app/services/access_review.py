@@ -27,6 +27,7 @@ from app.crypto.org_encryption import (
     unwrap_key,
 )
 from app.db.models import AccessApproval, AccessGrantKey, AccessRequest, Payload, PayloadKey
+from app.services import consent_events
 from app.services.payload_store import PayloadShreddedError, _aad, _decrypt_content
 
 DEFAULT_TTL_SECONDS = 3600
@@ -65,18 +66,43 @@ def create_access_request(
     )
     db.add(request)
     db.flush()
-    for payload_hash in payload_hashes:
+    scope = list(payload_hashes)
+    for payload_hash in scope:
         db.add(
             AccessGrantKey(request_id=request.id, payload_hash=payload_hash, wrapped_key_b64=None)
         )
     db.flush()
+
+    # Tamper-evident trail: the filing itself is the first signed event of the
+    # request's consent trace. Recorded in this same transaction — if the event
+    # cannot be written, the request is not created (fail-closed).
+    consent_events.start_consent_trace(db, request)
+    consent_events.record_consent_event(
+        db,
+        request=request,
+        event_type=consent_events.TYPE_REQUEST,
+        payload={
+            "requested_by": requested_by,
+            "reason": reason,
+            "scope": sorted(scope),
+            "required_approvals": request.required_approvals,
+            "expires_at": request.expires_at.isoformat(),
+            "grantee_key_fingerprint": consent_events.key_fingerprint(
+                request.grantee_public_pem
+            ),
+        },
+    )
     return request
 
 
-def _release_keys(db: Session, request: AccessRequest, org_private_pem: bytes) -> None:
-    """Org side: re-wrap each in-scope record's content key to the grantee key."""
+def _release_keys(db: Session, request: AccessRequest, org_private_pem: bytes) -> list[str]:
+    """Org side: re-wrap each in-scope record's content key to the grantee key.
+
+    Returns the payload hashes whose keys were released in this call (for the
+    consent trail)."""
     grantee_public = request.grantee_public_pem.encode("utf-8")
     items = db.query(AccessGrantKey).filter(AccessGrantKey.request_id == request.id).all()
+    released: list[str] = []
     for item in items:
         key_row = (
             db.query(PayloadKey)
@@ -93,7 +119,9 @@ def _release_keys(db: Session, request: AccessRequest, org_private_pem: bytes) -
         except KeyWrappingError:
             continue  # wrong org key — release nothing for this item
         item.wrapped_key_b64 = base64.b64encode(regranted).decode("ascii")
+        released.append(item.payload_hash)
     db.flush()
+    return released
 
 
 def approve_access_request(
@@ -112,26 +140,53 @@ def approve_access_request(
         .filter(AccessApproval.request_id == request_id, AccessApproval.approver_id == approver_id)
         .one_or_none()
     )
-    if existing is None:
-        db.add(AccessApproval(request_id=request_id, approver_id=approver_id))
-        db.flush()
+    if existing is not None:
+        return request  # repeat click by the same approver — nothing changed, no event
+    db.add(AccessApproval(request_id=request_id, approver_id=approver_id))
+    db.flush()
 
     count = db.query(AccessApproval).filter(AccessApproval.request_id == request_id).count()
+    released: list[str] = []
     if count >= request.required_approvals:
-        _release_keys(db, request, org_private_pem)
+        released = _release_keys(db, request, org_private_pem)
         request.status = "approved"
         db.flush()
+
+    consent_events.record_consent_event(
+        db,
+        request=request,
+        event_type=consent_events.TYPE_APPROVAL,
+        payload={
+            "approver_id": approver_id,
+            "approvals": count,
+            "required_approvals": request.required_approvals,
+            "released": sorted(released),
+            "status_after": request.status,
+        },
+    )
     return request
 
 
 def resolve_access_request(db: Session, *, request_id: uuid.UUID, status: str) -> AccessRequest:
     """Deny or revoke a request (status in {'denied','revoked'})."""
+    if status not in ("denied", "revoked"):
+        msg = f"invalid resolution status: {status}"
+        raise AccessReviewError(msg)
     request = db.get(AccessRequest, request_id)
     if request is None:
         msg = f"access request not found: {request_id}"
         raise AccessReviewError(msg)
+    if request.status == status:
+        return request  # idempotent repeat — nothing changed, no event
+    previous = request.status
     request.status = status
     db.flush()
+    consent_events.record_consent_event(
+        db,
+        request=request,
+        event_type=consent_events.TYPE_RESOLUTION,
+        payload={"status_before": previous, "status_after": status},
+    )
     return request
 
 
@@ -197,14 +252,16 @@ def record_client_approval(
         .filter(AccessApproval.request_id == request_id, AccessApproval.approver_id == approver_id)
         .one_or_none()
     )
-    if existing is None:
-        db.add(AccessApproval(request_id=request_id, approver_id=approver_id))
-        db.flush()
+    if existing is not None:
+        return request  # repeat click by the same approver — nothing changed, no event
+    db.add(AccessApproval(request_id=request_id, approver_id=approver_id))
+    db.flush()
 
     scope_hashes = {
         item.payload_hash
         for item in db.query(AccessGrantKey).filter(AccessGrantKey.request_id == request_id).all()
     }
+    released_now: list[str] = []
     for payload_hash, wrapped in released_keys.items():
         if payload_hash in scope_hashes:
             item = (
@@ -216,6 +273,7 @@ def record_client_approval(
                 .one()
             )
             item.wrapped_key_b64 = wrapped
+            released_now.append(payload_hash)
     db.flush()
 
     unreleased = (
@@ -223,9 +281,23 @@ def record_client_approval(
         .filter(AccessGrantKey.request_id == request_id, AccessGrantKey.wrapped_key_b64.is_(None))
         .count()
     )
-    if approvals_count(db, request_id) >= request.required_approvals and unreleased == 0:
+    count = approvals_count(db, request_id)
+    if count >= request.required_approvals and unreleased == 0:
         request.status = "approved"
         db.flush()
+
+    consent_events.record_consent_event(
+        db,
+        request=request,
+        event_type=consent_events.TYPE_APPROVAL,
+        payload={
+            "approver_id": approver_id,
+            "approvals": count,
+            "required_approvals": request.required_approvals,
+            "released": sorted(released_now),
+            "status_after": request.status,
+        },
+    )
     return request
 
 
@@ -265,8 +337,19 @@ def read_via_grant(
 
     aad = _aad(enc_alg=payload.enc_alg, org_id=request.org_id, payload_hash=payload_hash)
     try:
-        return _decrypt_content(
+        content = _decrypt_content(
             payload.encrypted_blob, base64.b64encode(dek).decode("ascii"), aad=aad
         )
     except PayloadShreddedError:
         return None
+
+    # "No unrecorded vendor access": the read is appended to the consent trail in
+    # the SAME transaction the caller commits. If this raises, the read fails and
+    # no content is returned — an access that cannot be recorded does not happen.
+    consent_events.record_consent_event(
+        db,
+        request=request,
+        event_type=consent_events.TYPE_READ,
+        payload={"payload_hash": payload_hash, "reader": "attest_admin"},
+    )
+    return content

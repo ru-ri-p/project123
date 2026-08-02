@@ -242,6 +242,54 @@ class GrantRecordOut(BaseModel):
     content: dict[str, Any]
 
 
+class AdminOrgOut(BaseModel):
+    id: str
+    name: str
+    region: str
+    confidentiality_mode: str
+    fail_mode: str
+    created_at: str
+
+
+class AdminOrgCreateIn(BaseModel):
+    org_id: str = Field(min_length=1, pattern=r"^[a-zA-Z0-9_\-]+$")
+    name: str = Field(min_length=1)
+    region: str = "uae"
+    api_key: str | None = Field(
+        default=None,
+        min_length=12,
+        description="Optional fixed key (dev/pilot); omit for a random one.",
+    )
+
+
+class AdminOrgKeyOut(BaseModel):
+    org_id: str
+    api_key: str  # shown once; only the hash is stored
+
+
+class AdminScopeItem(BaseModel):
+    payload_hash: str
+    released: bool
+
+
+class AdminRequestOut(AccessRequestOut):
+    requested_by: str
+    trace_id: str | None = None
+
+
+class AdminRequestDetailOut(AdminRequestOut):
+    scope: list[AdminScopeItem]
+
+
+class AdminTraceEventOut(BaseModel):
+    seq: int
+    type: str
+    payload_hash: str
+    hash: str
+    prev_hash: str | None
+    created_at: str
+
+
 class PolicyOut(BaseModel):
     id: str
     org_id: str

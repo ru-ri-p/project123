@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
 from app.api.access import router as access_router
+from app.api.admin import router as admin_router
 from app.api.approvals import router as approvals_router
 from app.api.erasure import router as erasure_router
 from app.api.events import router as events_router
@@ -40,9 +41,18 @@ app.include_router(precheck_router)
 app.include_router(policies_router)
 app.include_router(mitigations_router)
 app.include_router(access_router)
+app.include_router(admin_router)
 
 
 _CONSOLE = Path(__file__).parent / "static" / "console.html"
+_ADMIN = Path(__file__).parent / "static" / "admin.html"
+
+
+@app.get("/admin", include_in_schema=False)
+def admin_dashboard() -> FileResponse:
+    """Attest-ops dashboard (admin-key gated at the API layer; the page itself
+    is public static HTML containing no secrets)."""
+    return FileResponse(_ADMIN, media_type="text/html")
 
 
 @app.get("/console", include_in_schema=False)

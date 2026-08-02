@@ -117,6 +117,10 @@ def read_record_via_grant(
             status_code=403,
             detail="not available (not approved, out of scope, or expired)",
         )
+    # The read appended an access_read event to the consent trail — commit it
+    # with the read. If recording failed, read_via_grant raised and no content
+    # reaches the caller (no unrecorded vendor access).
+    db.commit()
     return GrantRecordOut(payload_hash=payload_hash, content=content)
 
 

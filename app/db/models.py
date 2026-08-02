@@ -246,6 +246,13 @@ class AccessRequest(Base):
     required_approvals: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
     grantee_public_pem: Mapped[str] = mapped_column(Text, nullable=False)
     grantee_private_pem: Mapped[str] = mapped_column(Text, nullable=False)  # Attest's ephemeral key
+    # The request's CONSENT TRACE: every lifecycle action (filed, approved,
+    # denied/revoked, each read via the grant) is a signed hash-chained event in
+    # this trace, so the access trail is tamper-evident like any customer record.
+    # NULL only for requests that predate the consent-trail feature.
+    trace_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("traces.id"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
