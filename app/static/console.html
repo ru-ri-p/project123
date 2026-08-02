@@ -1,0 +1,412 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Attest — Customer Console</title>
+<style>
+  :root {
+    --bg: #0f1420; --panel: #171e2e; --panel2: #1e2739; --line: #2a3550;
+    --text: #e8ecf4; --muted: #9aa7bd; --accent: #4da3ff; --ok: #3ecf8e;
+    --warn: #f5b83d; --bad: #ff6b6b; --chip: #223052;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+         background: var(--bg); color: var(--text); }
+  header { padding: 18px 28px; border-bottom: 1px solid var(--line); display: flex;
+           align-items: center; gap: 14px; flex-wrap: wrap; }
+  header h1 { font-size: 18px; margin: 0; letter-spacing: .3px; }
+  header .sub { color: var(--muted); font-size: 13px; }
+  #orgbadge { margin-left: auto; background: var(--chip); border: 1px solid var(--line);
+              padding: 5px 12px; border-radius: 20px; font-size: 13px; display: none; }
+  main { max-width: 980px; margin: 0 auto; padding: 24px 20px 80px; }
+  nav.tabs { display: flex; gap: 6px; margin-bottom: 22px; flex-wrap: wrap; }
+  nav.tabs button { background: var(--panel); color: var(--muted); border: 1px solid var(--line);
+    padding: 9px 18px; border-radius: 8px; cursor: pointer; font-size: 14px; }
+  nav.tabs button.active { color: var(--text); border-color: var(--accent); background: var(--panel2); }
+  section.tab { display: none; }
+  section.tab.active { display: block; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+          padding: 20px 22px; margin-bottom: 18px; }
+  .card h2 { margin: 0 0 6px; font-size: 16px; }
+  .card p.hint { color: var(--muted); font-size: 13.5px; margin: 4px 0 14px; }
+  label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
+  input[type=text], input[type=password], textarea {
+    width: 100%; background: #0c111c; color: var(--text); border: 1px solid var(--line);
+    border-radius: 8px; padding: 9px 12px; font-size: 14px; font-family: inherit; }
+  textarea.mono { font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
+  button.act { background: var(--accent); color: #08111f; font-weight: 600; border: none;
+    padding: 10px 18px; border-radius: 8px; cursor: pointer; font-size: 14px; margin-top: 12px; }
+  button.act.secondary { background: var(--panel2); color: var(--text); border: 1px solid var(--line); }
+  button.act.danger { background: transparent; color: var(--bad); border: 1px solid var(--bad); }
+  button.act:disabled { opacity: .45; cursor: not-allowed; }
+  .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+  .chip { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 12px;
+          background: var(--chip); border: 1px solid var(--line); }
+  .chip.ok { color: var(--ok); border-color: var(--ok); }
+  .chip.warn { color: var(--warn); border-color: var(--warn); }
+  .chip.bad { color: var(--bad); border-color: var(--bad); }
+  .mono { font-family: ui-monospace, Menlo, monospace; }
+  .hash { font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: var(--muted);
+          word-break: break-all; }
+  #toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%);
+    background: var(--panel2); border: 1px solid var(--line); border-radius: 10px;
+    padding: 12px 20px; font-size: 14px; display: none; max-width: 90vw; z-index: 50; }
+  #toast.err { border-color: var(--bad); color: var(--bad); }
+  #toast.ok { border-color: var(--ok); color: var(--ok); }
+  .req { border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin: 10px 0;
+         background: var(--panel2); }
+  .req .top { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .req .reason { font-weight: 600; }
+  details { margin-top: 10px; }
+  summary { cursor: pointer; color: var(--accent); font-size: 13.5px; }
+  .scopeitem { padding: 8px 10px; border-left: 3px solid var(--line); margin: 8px 0; }
+  .kv { color: var(--muted); font-size: 13px; }
+  .kv b { color: var(--text); font-weight: 600; }
+  .warnbox { border: 1px solid var(--warn); border-radius: 8px; padding: 10px 14px;
+             color: var(--warn); font-size: 13.5px; margin-top: 12px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 500; font-size: 12.5px; }
+  .empty { color: var(--muted); font-size: 14px; padding: 18px 4px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Attest Customer Console</h1>
+  <span class="sub">Your keys. Your consent. Verifiable records.</span>
+  <span id="orgbadge"></span>
+</header>
+<main>
+  <nav class="tabs">
+    <button data-tab="setup" class="active">Setup &amp; Keys</button>
+    <button data-tab="requests">Access Requests</button>
+    <button data-tab="records">Records</button>
+  </nav>
+
+  <!-- ======================= SETUP ======================= -->
+  <section class="tab active" id="tab-setup">
+    <div class="card">
+      <h2>1 · Connect</h2>
+      <p class="hint">Paste the API key you received from the Attest team. It is stored only in this
+        browser (localStorage) and sent only to this Attest service.</p>
+      <label>API key</label>
+      <input type="password" id="apikey" placeholder="attest_… / wthq_…" autocomplete="off">
+      <button class="act" id="btn-connect">Connect</button>
+      <span id="connstatus" class="chip" style="margin-left:10px; display:none;"></span>
+    </div>
+
+    <div class="card">
+      <h2>2 · Generate your wrapping keypair</h2>
+      <p class="hint">Created <b>inside your browser</b> — the private key is never sent anywhere.
+        Download both files and keep the private key safe (it is what makes your data unreadable to
+        Attest).</p>
+      <button class="act" id="btn-keygen">Generate keypair</button>
+      <div id="keygenout" style="display:none;">
+        <div class="row" style="margin-top:12px;">
+          <button class="act secondary" id="btn-dl-priv">Download private key</button>
+          <button class="act secondary" id="btn-dl-pub">Download public key</button>
+        </div>
+        <div class="warnbox">Store <b>org_private.pem</b> somewhere safe (password manager / KMS).
+          If you lose it, no one — including Attest — can recover your encrypted content.</div>
+        <details><summary>Show public key (safe to share)</summary>
+          <textarea class="mono" id="pubpem" rows="8" readonly></textarea></details>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>3 · Go dark (enable customer-key mode)</h2>
+      <p class="hint">Registers your <b>public</b> key with Attest. From then on, everything you
+        record is encrypted under a key Attest cannot open — until you approve a specific request.</p>
+      <div id="enable-nokey" class="kv">Generate a keypair above first (or paste an existing public
+        key into the box under “Show public key”).</div>
+      <button class="act" id="btn-enable" disabled>Enable customer-key mode</button>
+      <span id="enablestatus" class="chip" style="margin-left:10px; display:none;"></span>
+    </div>
+  </section>
+
+  <!-- ======================= REQUESTS ======================= -->
+  <section class="tab" id="tab-requests">
+    <div class="card">
+      <div class="row">
+        <h2 style="margin:0;">Access requests from Attest</h2>
+        <button class="act secondary" id="btn-refresh" style="margin:0 0 0 auto;">Refresh</button>
+      </div>
+      <p class="hint">Each request names the exact records Attest wants to see and why. Nothing is
+        visible to Attest until you approve — and approving releases <b>only</b> the records listed,
+        never your key.</p>
+      <div id="reqlist"><div class="empty">Connect first, then refresh.</div></div>
+    </div>
+  </section>
+
+  <!-- ======================= RECORDS ======================= -->
+  <section class="tab" id="tab-records">
+    <div class="card">
+      <div class="row">
+        <h2 style="margin:0;">Your recorded traces</h2>
+        <button class="act secondary" id="btn-traces" style="margin:0 0 0 auto;">Refresh</button>
+      </div>
+      <p class="hint">Every AI action your systems record, hash-chained and signed. “Verify” re-checks
+        every hash, signature and chain link on the server.</p>
+      <div id="tracelist"><div class="empty">Connect first, then refresh.</div></div>
+    </div>
+  </section>
+</main>
+
+<div id="toast"></div>
+
+<script>
+"use strict";
+/* ---------- tiny helpers ---------- */
+const $ = (s) => document.querySelector(s);
+const api = {
+  key: localStorage.getItem("attest_api_key") || "",
+  async call(path, opts = {}) {
+    const headers = Object.assign({ "x-api-key": api.key }, opts.headers || {});
+    if (opts.body !== undefined) headers["content-type"] = "application/json";
+    const res = await fetch(path, {
+      method: opts.method || "GET", headers,
+      body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+    });
+    if (!res.ok) {
+      let msg = res.status + "";
+      try { const j = await res.json(); msg += " — " + (typeof j.detail === "string" ? j.detail : JSON.stringify(j.detail)); }
+      catch (e) { /* keep status only */ }
+      throw new Error(msg);
+    }
+    return res.status === 204 ? null : res.json();
+  },
+};
+function toast(msg, kind) {
+  const t = $("#toast");
+  t.textContent = msg; t.className = kind || ""; t.style.display = "block";
+  clearTimeout(t._h); t._h = setTimeout(() => { t.style.display = "none"; }, 5000);
+}
+function esc(s) { return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+
+/* ---------- base64 / PEM ---------- */
+const b64 = {
+  enc: (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))),
+  dec: (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0)).buffer,
+};
+function toPem(buf, label) {
+  const body = b64.enc(buf).replace(/(.{64})/g, "$1\n");
+  return `-----BEGIN ${label}-----\n${body}\n-----END ${label}-----\n`;
+}
+function fromPem(pem) {
+  const body = pem.replace(/-----[^-]+-----/g, "").replace(/\s+/g, "");
+  return b64.dec(body);
+}
+
+/* ---------- WebCrypto: RSA-3072-OAEP-SHA256, matching the Attest service ---------- */
+const RSA = { name: "RSA-OAEP", hash: "SHA-256" };
+async function generateKeypair() {
+  return crypto.subtle.generateKey(
+    { ...RSA, modulusLength: 3072, publicExponent: new Uint8Array([1, 0, 1]) },
+    true, ["encrypt", "decrypt"]);
+}
+const importPriv = (pem) => crypto.subtle.importKey("pkcs8", fromPem(pem), RSA, false, ["decrypt"]);
+const importPub  = (pem) => crypto.subtle.importKey("spki",  fromPem(pem), RSA, false, ["encrypt"]);
+
+/* The consent “key release” for ONE record, entirely in this browser:
+   unwrap the record key with our private key, re-wrap to Attest's one-time grantee key. */
+async function regrant(privKey, wrappedForOrgB64, granteePubKey) {
+  const dek = await crypto.subtle.decrypt(RSA, privKey, b64.dec(wrappedForOrgB64));
+  const rewrapped = await crypto.subtle.encrypt(RSA, granteePubKey, dek);
+  return b64.enc(rewrapped);
+}
+
+/* ---------- state ---------- */
+let keypairPems = { priv: null, pub: null };
+
+/* ---------- tabs ---------- */
+document.querySelectorAll("nav.tabs button").forEach((b) => b.addEventListener("click", () => {
+  document.querySelectorAll("nav.tabs button").forEach((x) => x.classList.remove("active"));
+  document.querySelectorAll("section.tab").forEach((x) => x.classList.remove("active"));
+  b.classList.add("active"); $("#tab-" + b.dataset.tab).classList.add("active");
+}));
+
+/* ---------- connect ---------- */
+$("#apikey").value = api.key;
+$("#btn-connect").addEventListener("click", async () => {
+  api.key = $("#apikey").value.trim();
+  try {
+    const me = await api.call("/v1/org/me");
+    localStorage.setItem("attest_api_key", api.key);
+    $("#orgbadge").style.display = "inline-block";
+    $("#orgbadge").textContent = me.name + " · " + me.id;
+    const cs = $("#connstatus"); cs.style.display = "inline-block";
+    cs.className = "chip ok"; cs.textContent = "connected";
+    toast("Connected as " + me.name, "ok");
+  } catch (e) {
+    const cs = $("#connstatus"); cs.style.display = "inline-block";
+    cs.className = "chip bad"; cs.textContent = "failed";
+    toast("Connection failed: " + e.message, "err");
+  }
+});
+
+/* ---------- keygen ---------- */
+$("#btn-keygen").addEventListener("click", async () => {
+  const btn = $("#btn-keygen"); btn.disabled = true; btn.textContent = "Generating (3072-bit)…";
+  try {
+    const kp = await generateKeypair();
+    keypairPems.priv = toPem(await crypto.subtle.exportKey("pkcs8", kp.privateKey), "PRIVATE KEY");
+    keypairPems.pub  = toPem(await crypto.subtle.exportKey("spki",  kp.publicKey),  "PUBLIC KEY");
+    $("#pubpem").value = keypairPems.pub;
+    $("#keygenout").style.display = "block";
+    $("#btn-enable").disabled = false;
+    $("#enable-nokey").style.display = "none";
+    toast("Keypair generated in your browser. Download and store the private key.", "ok");
+  } catch (e) { toast("Key generation failed: " + e.message, "err"); }
+  btn.disabled = false; btn.textContent = "Generate keypair";
+});
+function download(name, text) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([text], { type: "application/x-pem-file" }));
+  a.download = name; a.click(); URL.revokeObjectURL(a.href);
+}
+$("#btn-dl-priv").addEventListener("click", () => download("org_private.pem", keypairPems.priv));
+$("#btn-dl-pub").addEventListener("click", () => download("org_public.pem", keypairPems.pub));
+
+/* ---------- enable customer-key ---------- */
+$("#btn-enable").addEventListener("click", async () => {
+  const pub = ($("#pubpem").value || keypairPems.pub || "").trim();
+  if (!pub) { toast("Generate or paste a public key first.", "err"); return; }
+  try {
+    const out = await api.call("/v1/org/confidentiality", { method: "POST",
+      body: { wrapping_public_pem: pub } });
+    const st = $("#enablestatus"); st.style.display = "inline-block";
+    st.className = "chip ok"; st.textContent = out.confidentiality_mode;
+    toast("Customer-key mode enabled. Your content is now dark to Attest.", "ok");
+  } catch (e) { toast("Enable failed: " + e.message, "err"); }
+});
+
+/* ---------- access requests ---------- */
+$("#btn-refresh").addEventListener("click", loadRequests);
+async function loadRequests() {
+  const box = $("#reqlist");
+  try {
+    const reqs = await api.call("/v1/access-requests");
+    if (!reqs.length) { box.innerHTML = '<div class="empty">No access requests. Attest cannot see your content.</div>'; return; }
+    box.innerHTML = "";
+    for (const r of reqs) box.appendChild(renderRequest(r));
+  } catch (e) { toast("Could not load requests: " + e.message, "err"); }
+}
+function statusChip(s) {
+  const cls = { pending: "warn", approved: "ok", denied: "bad", revoked: "bad" }[s] || "";
+  return `<span class="chip ${cls}">${esc(s)}</span>`;
+}
+function renderRequest(r) {
+  const el = document.createElement("div"); el.className = "req";
+  el.innerHTML = `
+    <div class="top">${statusChip(r.status)}
+      <span class="reason">${esc(r.reason)}</span>
+      <span class="kv" style="margin-left:auto;">expires <b>${esc(r.expires_at.slice(0, 16).replace("T", " "))}</b></span>
+    </div>
+    <div class="kv" style="margin-top:4px;">request <span class="mono">${esc(r.request_id)}</span>
+      · approvals ${r.approvals}/${r.required_approvals}</div>
+    <details><summary>Review scope &amp; act</summary>
+      <div class="detail">Loading…</div></details>`;
+  el.querySelector("details").addEventListener("toggle", async function () {
+    if (!this.open || this._loaded) return; this._loaded = true;
+    try {
+      const d = await api.call("/v1/access-requests/" + r.request_id);
+      const target = this.querySelector(".detail");
+      const scope = d.scope.map((s) => `
+        <div class="scopeitem"><div class="hash">${esc(s.payload_hash)}</div>
+        <div class="kv">${s.wrapped_key_for_org ? "customer-key record (needs your release)" : "not a customer-key record"}</div></div>`).join("");
+      target.innerHTML = `
+        <p class="kv" style="margin:10px 0 4px;">Attest is asking to read <b>${d.scope.length} record(s)</b>:</p>
+        ${scope}
+        ${r.status === "pending" ? `
+          <label>Your name / approver id</label>
+          <input type="text" class="approver" placeholder="e.g. compliance_officer_1">
+          <label>Your private key file (used locally in this browser — never uploaded)</label>
+          <input type="file" class="keyfile" accept=".pem">
+          <div class="kv" style="margin-top:6px;">…or paste the private key PEM:</div>
+          <textarea class="mono keypaste" rows="4" placeholder="-----BEGIN PRIVATE KEY-----"></textarea>
+          <div class="row">
+            <button class="act approve">Approve — release only these records</button>
+            <button class="act danger deny">Deny</button>
+          </div>` : ""}
+        ${r.status === "approved" ? `
+          <div class="row"><button class="act danger revoke">Revoke access</button></div>` : ""}`;
+      const approveBtn = target.querySelector(".approve");
+      if (approveBtn) approveBtn.addEventListener("click", () => approveRequest(r.request_id, d, target, approveBtn));
+      const denyBtn = target.querySelector(".deny");
+      if (denyBtn) denyBtn.addEventListener("click", () => resolveRequest(r.request_id, "denied"));
+      const revokeBtn = target.querySelector(".revoke");
+      if (revokeBtn) revokeBtn.addEventListener("click", () => resolveRequest(r.request_id, "revoked"));
+    } catch (e) { toast("Could not load request: " + e.message, "err"); }
+  });
+  return el;
+}
+async function readKeyPem(target) {
+  const paste = target.querySelector(".keypaste").value.trim();
+  if (paste) return paste;
+  const f = target.querySelector(".keyfile").files[0];
+  if (!f) throw new Error("select your private key file or paste the PEM");
+  return f.text();
+}
+async function approveRequest(id, detail, target, btn) {
+  btn.disabled = true; btn.textContent = "Releasing keys locally…";
+  try {
+    const approver = target.querySelector(".approver").value.trim();
+    if (!approver) throw new Error("enter your approver id");
+    const privPem = await readKeyPem(target);
+    const priv = await importPriv(privPem);
+    const grantee = await importPub(detail.grantee_public_pem);
+    const released = {};
+    for (const s of detail.scope) {
+      if (!s.wrapped_key_for_org) continue;
+      released[s.payload_hash] = await regrant(priv, s.wrapped_key_for_org, grantee);
+    }
+    const out = await api.call(`/v1/access-requests/${id}/approve`, { method: "POST",
+      body: { approver_id: approver, released_keys: released } });
+    toast(out.status === "approved"
+      ? "Approved — Attest can now read exactly these records, until expiry."
+      : `Approval recorded (${out.approvals}/${out.required_approvals}).`, "ok");
+    loadRequests();
+  } catch (e) {
+    toast("Approve failed: " + e.message, "err");
+    btn.disabled = false; btn.textContent = "Approve — release only these records";
+  }
+}
+async function resolveRequest(id, status) {
+  try {
+    await api.call(`/v1/access-requests/${id}/resolve`, { method: "POST", body: { status } });
+    toast(status === "denied" ? "Request denied — nothing was released." : "Access revoked.", "ok");
+    loadRequests();
+  } catch (e) { toast("Failed: " + e.message, "err"); }
+}
+
+/* ---------- traces ---------- */
+$("#btn-traces").addEventListener("click", loadTraces);
+async function loadTraces() {
+  const box = $("#tracelist");
+  try {
+    const traces = await api.call("/v1/traces");
+    if (!traces.length) { box.innerHTML = '<div class="empty">No traces recorded yet.</div>'; return; }
+    box.innerHTML = `<table><thead><tr><th>Trace</th><th>Created</th><th>Events</th><th>Integrity</th></tr></thead>
+      <tbody>${traces.map((t) => `
+        <tr><td class="mono" style="font-size:12px;">${esc(t.trace_id)}</td>
+        <td class="kv">${esc((t.created_at || "").slice(0, 16).replace("T", " "))}</td>
+        <td>${t.event_count}</td>
+        <td><button class="act secondary" style="margin:0;padding:5px 12px;font-size:12.5px;"
+              data-trace="${esc(t.trace_id)}">Verify</button> <span class="chip" style="display:none;"></span></td>
+        </tr>`).join("")}</tbody></table>`;
+    box.querySelectorAll("button[data-trace]").forEach((b) => b.addEventListener("click", async () => {
+      const chip = b.nextElementSibling; b.disabled = true; b.textContent = "…";
+      try {
+        const rep = await api.call(`/v1/trace/${b.dataset.trace}/replay`);
+        chip.style.display = "inline-block";
+        chip.className = rep.all_verified ? "chip ok" : "chip bad";
+        chip.textContent = rep.all_verified ? `✓ ${rep.events.length} events verified` : "✗ verification FAILED";
+      } catch (e) { toast("Verify failed: " + e.message, "err"); }
+      b.disabled = false; b.textContent = "Verify";
+    }));
+  } catch (e) { toast("Could not load traces: " + e.message, "err"); }
+}
+</script>
+</body>
+</html>

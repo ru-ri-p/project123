@@ -1,5 +1,8 @@
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 
 from app.api.access import router as access_router
 from app.api.approvals import router as approvals_router
@@ -37,6 +40,19 @@ app.include_router(precheck_router)
 app.include_router(policies_router)
 app.include_router(mitigations_router)
 app.include_router(access_router)
+
+
+_CONSOLE = Path(__file__).parent / "static" / "console.html"
+
+
+@app.get("/console", include_in_schema=False)
+def customer_console() -> FileResponse:
+    """Self-contained customer console (setup, consent requests, record verification).
+
+    A single static page; all key operations run in the visitor's browser via
+    WebCrypto, so private keys never reach this server.
+    """
+    return FileResponse(_CONSOLE, media_type="text/html")
 
 
 @app.get("/health")

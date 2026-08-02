@@ -23,6 +23,23 @@ Everything below runs on **your** machine. Your private key never leaves it.
 
 ---
 
+## Fastest path: the web console (no install)
+
+Open **`{SERVICE_URL}/console`** in a browser. It walks you through the whole
+ceremony with buttons — connect with your API key, generate your keypair (created
+*in your browser* via WebCrypto; download and keep the private key), enable
+customer-key mode, review and approve/deny access requests, and verify your
+recorded traces. The approve step reads your private-key file locally in the
+browser; the key is never uploaded.
+
+The only step that still involves code is recording events (step 4 below) —
+that's your app's SDK integration, unchanged.
+
+Prefer a terminal, or want to audit exactly what runs? The CLI below is the
+equivalent flow and remains fully supported.
+
+---
+
 ## 1. Install (with the consent extra)
 
 ```bash
