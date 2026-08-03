@@ -228,6 +228,31 @@ class PackSubscriptionIn(BaseModel):
     enforcement: Literal["advisory"] = "advisory"  # blocking reserved for post-review
 
 
+class PolicyDecisionOut(BaseModel):
+    trace_id: str
+    seq: int
+    action: str
+    tier: str
+    policy_tier: str
+    allowed: bool
+    policy_version: str | None = None
+    jurisdictions: list[str] = Field(default_factory=list)
+    findings: list[dict[str, Any]] = Field(default_factory=list)
+    event_hash: str
+    created_at: str
+
+
+class ComplianceSummaryOut(BaseModel):
+    """Headline numbers for the compliance screens."""
+
+    decisions_total: int
+    flagged_total: int
+    by_tier: dict[str, int]
+    by_jurisdiction: dict[str, int]
+    unverified_packs: int
+    active_policy_version: str | None = None
+
+
 class InternalPolicyIn(BaseModel):
     """The institution authors its own policy; Attest does not supply it."""
 

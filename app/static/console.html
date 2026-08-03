@@ -206,6 +206,78 @@
       </div>
     </section>
 
+    <!-- ==================== COMPLIANCE ==================== -->
+    <section class="screen" id="scr-compliance">
+      <h1>Compliance</h1>
+      <div class="sub">Your own policy, the jurisdictions applied to you, and what they flagged.</div>
+
+      <div class="banner amber" style="margin-bottom:18px;">
+        <b>How to read this.</b> Attest applies the rules you adopt and proves it did — it does not
+        determine whether an action was lawful. Jurisdiction packs are <b>advisory</b>: they raise
+        risk and cite their instrument, but only your own policy can block an action.
+      </div>
+
+      <div class="grid3" style="margin-bottom:26px;">
+        <div class="card">
+          <div class="eyebrow" style="margin-bottom:10px;">DECISIONS CHECKED</div>
+          <div class="statline"><b id="cs-total" style="color:var(--ink);font-size:18px;">—</b></div>
+          <div class="kv2">against policy <span class="mono" id="cs-policy">—</span></div>
+        </div>
+        <div class="card">
+          <div class="eyebrow" style="margin-bottom:10px;">FLAGGED FOR REVIEW</div>
+          <div class="statline"><span class="sdot" id="cs-flagdot"></span>
+            <b id="cs-flagged">—</b></div>
+          <div class="kv2">orange or red tier</div>
+        </div>
+        <div class="card">
+          <div class="eyebrow" style="margin-bottom:10px;">JURISDICTIONS APPLIED</div>
+          <div class="statline"><b id="cs-juris" style="color:var(--ink);font-size:18px;">—</b></div>
+          <div class="kv2" id="cs-unverified"></div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:14px;">
+        <div class="row">
+          <div class="eyebrow">APPLIED RULEBOOKS</div>
+          <button class="btn" id="btn-mypacks" style="margin:0 0 0 auto;padding:4px 12px;">Refresh</button>
+        </div>
+        <div id="mypacks" style="margin-top:10px;"><div class="empty">Connect to load.</div></div>
+        <div style="margin-top:14px;">
+          <div class="eyebrow" style="margin-bottom:8px;">AVAILABLE TO ADOPT</div>
+          <div class="row">
+            <select id="avail-packs" style="flex:1;"></select>
+            <button class="btn primary" id="btn-adopt" style="margin:0;">Adopt (advisory)</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:14px;">
+        <div class="row">
+          <div class="eyebrow">RECENT DECISIONS</div>
+          <label style="margin:0 0 0 auto;display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--mut);">
+            <input type="checkbox" id="flagged-only"> flagged only</label>
+          <button class="btn" id="btn-decisions" style="margin:0;padding:4px 12px;">Refresh</button>
+        </div>
+        <div id="decisions" style="margin-top:10px;"><div class="empty">Connect to load.</div></div>
+      </div>
+
+      <div class="card">
+        <div class="eyebrow" style="margin-bottom:6px;">YOUR OWN POLICY</div>
+        <div class="kv2" style="margin-bottom:10px;">Authored by you. This is the only rulebook that
+          can block an action — Attest supplies no template and takes no view on its content.</div>
+        <div class="row">
+          <input class="field" id="pol-name" placeholder="Policy name" style="flex:2;min-width:200px;">
+          <input class="field mono" id="pol-version" placeholder="version e.g. v2" style="flex:1;min-width:120px;">
+        </div>
+        <label>Rules (JSON)</label>
+        <textarea class="field mono" id="pol-rules" rows="10" style="font-size:11.5px;"></textarea>
+        <div class="row">
+          <button class="btn primary" id="btn-save-policy">Publish &amp; activate version</button>
+          <button class="btn" id="btn-load-policy">Load active</button>
+        </div>
+      </div>
+    </section>
+
     <!-- ==================== KEYS & CUSTODY ==================== -->
     <section class="screen" id="scr-keys">
       <h1>Keys &amp; Custody</h1>
@@ -290,7 +362,7 @@ async function regrant(privKey, wrappedForOrgB64, granteePubKey) {
 let keypairPems = { priv: null, pub: null };
 
 /* ---------- nav ---------- */
-const SCREENS = [["overview","Overview"],["requests","Consent Requests"],["trace","Audit Records"],["keys","Keys & Custody"]];
+const SCREENS = [["overview","Overview"],["requests","Consent Requests"],["compliance","Compliance"],["trace","Audit Records"],["keys","Keys & Custody"]];
 function go(k) {
   document.querySelectorAll("nav.screens button").forEach((b) => b.classList.toggle("on", b.dataset.k === k));
   document.querySelectorAll(".screen").forEach((s) => s.classList.toggle("on", s.id === "scr-" + k));
@@ -313,7 +385,7 @@ async function connect() {
     $("#orgbadge").innerHTML = `<b>${esc(ov.name)}</b><br><span class="mono" style="font-size:11px;color:var(--faint);">${esc(ov.org_id)}</span>`;
     $("#connstate").textContent = "Connected.";
     $("#keyform").style.display = "none";
-    renderOverview(ov); loadRequests(); loadTraces(); renderCustody(ov);
+    renderOverview(ov); loadRequests(); loadTraces(); renderCustody(ov); loadCompliance();
     toast("Connected as " + ov.name, "ok");
   } catch (e) {
     $("#connstate").textContent = "Connection failed.";
@@ -573,6 +645,134 @@ async function loadReqTrail(traceId) {
       </li>`).join("")}</ul>`;
   } catch (e) { $("#req-trail").innerHTML = `<div class="empty">Trail unavailable: ${esc(e.message)}</div>`; }
 }
+
+/* ---------- compliance ---------- */
+const VERIF = {
+  unverified:       ["amber", "UNVERIFIED"],
+  self_reviewed:    ["blue",  "SELF-REVIEWED"],
+  counsel_reviewed: ["blue",  "COUNSEL-REVIEWED"],
+};
+const JURIS_LABEL = { difc: "DIFC", adgm: "ADGM", uae_onshore: "UAE ONSHORE", internal: "INTERNAL" };
+const TIERCHIP = { green: "blue", yellow: "amber", orange: "amber", red: "red" };
+
+function loadCompliance() { loadSummary(); loadMyPacks(); loadDecisions(); }
+$("#btn-mypacks").addEventListener("click", loadMyPacks);
+$("#btn-decisions").addEventListener("click", loadDecisions);
+$("#flagged-only").addEventListener("change", loadDecisions);
+
+async function loadSummary() {
+  try {
+    const s = await api.call("/v1/policies/compliance-summary");
+    $("#cs-total").textContent = s.decisions_total.toLocaleString();
+    $("#cs-policy").textContent = s.active_policy_version || "none";
+    $("#cs-flagged").textContent = s.flagged_total.toLocaleString();
+    $("#cs-flagdot").style.background = s.flagged_total > 0 ? "var(--amberB)" : "var(--blue)";
+    $("#cs-flagged").style.color = s.flagged_total > 0 ? "var(--amber)" : "var(--blue)";
+    const js = Object.keys(s.by_jurisdiction);
+    $("#cs-juris").textContent = js.length ? js.map((j) => JURIS_LABEL[j] || j).join(", ") : "none";
+    $("#cs-unverified").textContent = s.unverified_packs > 0
+      ? `${s.unverified_packs} rulebook${s.unverified_packs > 1 ? "s" : ""} pending legal review`
+      : "";
+  } catch (e) { /* compliance is optional until packs exist */ }
+}
+
+async function loadMyPacks() {
+  try {
+    const [mine, avail] = await Promise.all([
+      api.call("/v1/policies/packs/mine"),
+      api.call("/v1/policies/packs"),
+    ]);
+    const mineCodes = new Set(mine.map((p) => p.code));
+    $("#mypacks").innerHTML = mine.length ? mine.map((p) => {
+      const [cls, label] = VERIF[p.verification_status] || ["grey", p.verification_status];
+      return `<div class="rowline">
+        <span class="chip grey">${esc(JURIS_LABEL[p.jurisdiction] || p.jurisdiction)}</span>
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:600;font-size:13.5px;">${esc(p.name)}</div>
+          <div class="kv2">${esc(p.instrument)}${p.source_url
+            ? ` · <a href="${esc(p.source_url)}" target="_blank" rel="noopener" style="color:var(--blue);">official source ↗</a>` : ""}</div>
+        </div>
+        <span class="chip ${cls}">${label}</span>
+        <span class="chip blue">${esc((p.enforcement || "advisory").toUpperCase())}</span>
+      </div>`;
+    }).join("") : '<div class="empty">No jurisdiction rulebooks applied yet.</div>';
+    const options = avail.filter((p) => !mineCodes.has(p.code));
+    $("#avail-packs").innerHTML = options.length
+      ? options.map((p) => `<option value="${esc(p.code)}">${esc(JURIS_LABEL[p.jurisdiction] || p.jurisdiction)} — ${esc(p.name)}</option>`).join("")
+      : '<option value="">(all available rulebooks already adopted)</option>';
+  } catch (e) { toast("Rulebooks failed: " + e.message, "err"); }
+}
+$("#btn-adopt").addEventListener("click", async () => {
+  const code = $("#avail-packs").value;
+  if (!code) { toast("Nothing to adopt.", "err"); return; }
+  try {
+    await api.call("/v1/policies/packs/subscribe", { method: "POST",
+      body: { pack_code: code, enabled: true, enforcement: "advisory" } });
+    toast("Rulebook adopted (advisory).", "ok");
+    loadMyPacks(); loadSummary();
+  } catch (e) { toast("Adopt failed: " + e.message, "err"); }
+});
+
+async function loadDecisions() {
+  const flagged = $("#flagged-only").checked;
+  try {
+    const rows = await api.call("/v1/policies/decisions" + (flagged ? "?flagged_only=true" : ""));
+    $("#decisions").innerHTML = rows.length ? rows.map((d) => `
+      <div class="rowline" style="align-items:flex-start;">
+        <span class="chip ${TIERCHIP[d.tier] || "grey"}">${esc(d.tier.toUpperCase())}</span>
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:600;font-size:13.5px;">${esc(d.action)}
+            ${d.allowed ? "" : '<span class="chip red" style="margin-left:6px;">BLOCKED BY YOUR POLICY</span>'}</div>
+          <div class="kv2 mono" style="font-size:11px;">${esc(d.trace_id)} · seq ${d.seq} · ${fmtT(d.created_at)}</div>
+          ${d.findings.length ? d.findings.map((f) => `
+            <div style="border-left:2px solid var(--amberB);padding:6px 0 6px 10px;margin-top:8px;">
+              <div style="font-size:12.5px;">${esc(f.reason)}</div>
+              <div class="kv2">${esc(JURIS_LABEL[f.jurisdiction] || f.jurisdiction)} ·
+                ${esc(f.instrument)}${f.provision ? " · " + esc(f.provision) : ""}
+                ${f.topic ? " · " + esc(f.topic) : ""}</div>
+              ${f.guidance ? `<div class="kv2" style="font-style:italic;">${esc(f.guidance)}</div>` : ""}
+              <div style="margin-top:4px;">
+                <span class="chip ${(VERIF[f.verification_status] || ["grey"])[0]}" style="font-size:9.5px;">${esc((f.verification_status||"").toUpperCase())}</span>
+                ${f.advisory_only ? '<span class="chip grey" style="font-size:9.5px;">ADVISORY — DID NOT BLOCK</span>' : ""}
+              </div>
+            </div>`).join("") : '<div class="kv2">No jurisdiction findings.</div>'}
+        </div>
+      </div>`).join("") : '<div class="empty">No policy decisions recorded yet. Use the precheck API before an AI action to have it evaluated.</div>';
+  } catch (e) { toast("Decisions failed: " + e.message, "err"); }
+}
+
+/* ---------- internal policy authoring ---------- */
+$("#btn-load-policy").addEventListener("click", async () => {
+  try {
+    const p = await api.call("/v1/policies/active");
+    $("#pol-name").value = p.name; $("#pol-version").value = p.version;
+    $("#pol-rules").value = JSON.stringify(p.rules, null, 2);
+    toast("Loaded active policy " + p.version, "ok");
+  } catch (e) {
+    if (e.status === 404) {
+      $("#pol-name").value = "Internal AI policy"; $("#pol-version").value = "v1";
+      $("#pol-rules").value = JSON.stringify(
+        { schema_version: 2, engine: "json", rules: [
+          { id: "example_require_review", priority: 900, tier: "orange", decision: "flag",
+            match: { action: ["wire_transfer"] },
+            reason: "Example — replace with your own rules." } ] }, null, 2);
+      toast("No active policy — starter scaffold loaded. Edit it and publish.", "ok");
+    } else { toast("Load failed: " + e.message, "err"); }
+  }
+});
+$("#btn-save-policy").addEventListener("click", async () => {
+  const name = $("#pol-name").value.trim(), version = $("#pol-version").value.trim();
+  if (!name || !version) { toast("Name and version are required.", "err"); return; }
+  let rules;
+  try { rules = JSON.parse($("#pol-rules").value); }
+  catch (e) { toast("Rules must be valid JSON: " + e.message, "err"); return; }
+  try {
+    const p = await api.call("/v1/policies/internal", { method: "PUT",
+      body: { name, version, rules, activate: true } });
+    toast(`Policy ${p.version} published and active.`, "ok");
+    loadSummary();
+  } catch (e) { toast("Publish failed: " + e.message, "err"); }
+});
 
 /* ---------- audit records ---------- */
 $("#btn-traces").addEventListener("click", loadTraces);

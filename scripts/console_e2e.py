@@ -82,7 +82,9 @@ def main():
 
         # 3. Enable customer-key mode
         page.click("#btn-enable")
-        page.wait_for_selector("#enablestatus", state="visible", timeout=5000)
+        # Going dark hides the setup card (and the chip inside it) by design, so
+        # assert the end state that actually matters: custody shows an ACTIVE key.
+        page.wait_for_selector("#keycustody >> text=ACTIVE", timeout=10000)
         ok(True, "customer-key mode enabled via console")
 
         # 4. Record two events (the SDK/app path, unchanged)

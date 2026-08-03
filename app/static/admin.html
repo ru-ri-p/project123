@@ -285,6 +285,41 @@
       </div>
     </section>
 
+    <!-- ==================== REGULATION PACKS ==================== -->
+    <section class="screen" id="scr-packs">
+      <h1>Regulation Packs</h1>
+      <div class="sub">Jurisdiction rulebooks Attest publishes. Advisory only — a pack raises risk
+        and cites its instrument; it never blocks a customer's action.</div>
+      <div class="banner amber" id="packs-warning" style="margin-bottom:18px;">
+        <b>Unverified content.</b> These packs are drafted from public sources, not transcribed from
+        official texts, and have not been reviewed by counsel. Every finding is labelled with its
+        verification status. Do not present them to a customer as settled legal positions.
+      </div>
+      <div class="card" style="margin-bottom:14px;">
+        <div class="row">
+          <div class="eyebrow">PUBLISHED PACKS</div>
+          <button class="btn" id="btn-packs" style="margin:0 0 0 auto;padding:5px 12px;">Refresh</button>
+          <button class="btn primary" id="btn-seed" style="margin:0;padding:5px 12px;">Publish starter packs</button>
+        </div>
+        <div id="packlist" style="margin-top:10px;"><div class="empty">Connect, then refresh.</div></div>
+      </div>
+      <div class="card">
+        <div class="eyebrow" style="margin-bottom:10px;">APPLY A PACK TO A CUSTOMER</div>
+        <div class="row">
+          <div style="flex:1;min-width:220px;">
+            <label>Organisation</label>
+            <select id="pack-org"></select>
+          </div>
+          <div style="flex:1;min-width:220px;">
+            <label>Pack</label>
+            <select id="pack-code"></select>
+          </div>
+          <button class="btn primary" id="btn-subscribe" style="margin-top:22px;">Apply</button>
+        </div>
+        <div id="orgpacks" style="margin-top:14px;"></div>
+      </div>
+    </section>
+
     <!-- ==================== TRACE LOOKUP ==================== -->
     <section class="screen" id="scr-trace">
       <h1>Trace Lookup</h1>
@@ -330,7 +365,7 @@ const api = {
 };
 
 /* ---------- nav ---------- */
-const SCREENS = [["overview","Overview"],["requests","Access Requests"],["file","File a Request"],["orgs","Organisations"],["trace","Trace Lookup"]];
+const SCREENS = [["overview","Overview"],["requests","Access Requests"],["file","File a Request"],["orgs","Organisations"],["packs","Regulation Packs"],["trace","Trace Lookup"]];
 let current = "overview";
 function go(k) {
   current = k;
@@ -362,7 +397,7 @@ async function connect() {
     sessionStorage.setItem("attest_admin_key", api.key);
     setKeyState("loaded", await fingerprint(api.key));
     toast("Connected.", "ok");
-    loadOverview(); loadOrgs(); loadRequests();
+    loadOverview(); loadOrgs(); loadRequests(); loadPacks();
   } catch (e) {
     if (e.status === 401) { setKeyState("wrong", "key rejected by service"); }
     else if (e.status === 503) { setKeyState("missing", "server has no admin key configured"); }
@@ -611,9 +646,11 @@ function resetFile() {
 
 /* ---------- organisations ---------- */
 $("#btn-orgs").addEventListener("click", loadOrgs);
+let orgsCache = [];
 async function loadOrgs() {
   try {
     const orgs = await api.call("/v1/admin/orgs");
+    orgsCache = orgs;
     loadFileOrgs(orgs);
     $("#orgrows").innerHTML = orgs.length ? orgs.map((o) => `
       <tr>
@@ -659,6 +696,89 @@ $("#btn-create-org").addEventListener("click", async () => {
     showKeyBanner(out); $("#new-org-name").value = ""; $("#new-org-id").value = ""; $("#new-org-id")._touched = false;
     loadOrgs(); toast("Organisation created.", "ok");
   } catch (e) { toast("Create failed: " + e.message, "err"); }
+});
+
+/* ---------- regulation packs ---------- */
+const VERIF = {
+  unverified:       ["amber", "UNVERIFIED"],
+  self_reviewed:    ["blue",  "SELF-REVIEWED"],
+  counsel_reviewed: ["approved", "COUNSEL-REVIEWED"],
+};
+const JURIS_LABEL = { difc: "DIFC", adgm: "ADGM", uae_onshore: "UAE ONSHORE", internal: "INTERNAL" };
+let packsCache = [];
+$("#btn-packs").addEventListener("click", loadPacks);
+$("#btn-seed").addEventListener("click", async () => {
+  const b = $("#btn-seed"); b.disabled = true; b.textContent = "Publishing…";
+  try {
+    const packs = await api.call("/v1/admin/regulation-packs/seed", { method: "POST" });
+    toast(`Published ${packs.length} packs (all unverified).`, "ok");
+    loadPacks();
+  } catch (e) { toast("Seed failed: " + e.message, "err"); }
+  b.disabled = false; b.textContent = "Publish starter packs";
+});
+async function loadPacks() {
+  try {
+    // Self-sufficient: the org list feeds the "apply to customer" picker, and
+    // loadOrgs may not have finished (both are kicked off on connect).
+    if (!orgsCache.length) {
+      try { orgsCache = await api.call("/v1/admin/orgs"); } catch (e) { /* shown elsewhere */ }
+    }
+    packsCache = await api.call("/v1/admin/regulation-packs");
+    const box = $("#packlist");
+    if (!packsCache.length) {
+      box.innerHTML = '<div class="empty">No packs published yet — use “Publish starter packs”.</div>';
+    } else {
+      box.innerHTML = `<table><thead><tr><th>JURISDICTION</th><th>PACK</th><th>INSTRUMENT</th>
+        <th>RULES</th><th>REVIEW</th></tr></thead><tbody>${packsCache.map((p) => {
+        const [cls, label] = VERIF[p.verification_status] || ["grey", p.verification_status];
+        return `<tr>
+          <td><span class="chip grey">${esc(JURIS_LABEL[p.jurisdiction] || p.jurisdiction)}</span></td>
+          <td><div style="font-weight:600;">${esc(p.name)}</div>
+              <div class="mono" style="font-size:11px;color:var(--faint);">${esc(p.code)} · v${esc(p.version)}</div></td>
+          <td class="kv">${esc(p.instrument)}
+              ${p.source_url ? `<div><a href="${esc(p.source_url)}" target="_blank" rel="noopener"
+                 style="font-size:11.5px;color:var(--blue);">official source ↗</a></div>` : ""}</td>
+          <td class="mono">${p.rule_count}</td>
+          <td><span class="chip ${cls}">${label}</span></td>
+        </tr>`;
+      }).join("")}</tbody></table>`;
+    }
+    $("#pack-code").innerHTML = packsCache.map((p) =>
+      `<option value="${esc(p.code)}">${esc(JURIS_LABEL[p.jurisdiction] || p.jurisdiction)} — ${esc(p.name)}</option>`).join("");
+    $("#pack-org").innerHTML = orgsCache.map((o) =>
+      `<option value="${esc(o.id)}">${esc(o.id)} — ${esc(o.name)}</option>`).join("");
+    if (orgsCache.length) loadOrgPacks();
+  } catch (e) { toast("Packs failed: " + e.message, "err"); }
+}
+$("#pack-org").addEventListener("change", loadOrgPacks);
+async function loadOrgPacks() {
+  const org = $("#pack-org").value;
+  if (!org) return;
+  try {
+    const mine = await api.call(`/v1/admin/orgs/${encodeURIComponent(org)}/regulation-packs`);
+    $("#orgpacks").innerHTML = mine.length
+      ? `<div class="eyebrow" style="margin-bottom:8px;">APPLIED TO ${esc(org).toUpperCase()}</div>` +
+        mine.map((p) => {
+          const [cls, label] = VERIF[p.verification_status] || ["grey", p.verification_status];
+          return `<div class="rowline">
+            <span class="chip grey">${esc(JURIS_LABEL[p.jurisdiction] || p.jurisdiction)}</span>
+            <div style="flex:1;">${esc(p.name)}</div>
+            <span class="chip ${cls}">${label}</span>
+            <span class="chip ${p.enforcement === "advisory" ? "blue" : "red"}">${esc((p.enforcement||"").toUpperCase())}</span>
+          </div>`;
+        }).join("")
+      : `<div class="empty">No packs applied to ${esc(org)} yet.</div>`;
+  } catch (e) { toast("Org packs failed: " + e.message, "err"); }
+}
+$("#btn-subscribe").addEventListener("click", async () => {
+  const org = $("#pack-org").value, code = $("#pack-code").value;
+  if (!org || !code) { toast("Pick an organisation and a pack.", "err"); return; }
+  try {
+    await api.call(`/v1/admin/orgs/${encodeURIComponent(org)}/regulation-packs`, {
+      method: "POST", body: { pack_code: code, enabled: true, enforcement: "advisory" } });
+    toast("Pack applied (advisory).", "ok");
+    loadOrgPacks();
+  } catch (e) { toast("Apply failed: " + e.message, "err"); }
 });
 
 /* ---------- trace lookup ---------- */

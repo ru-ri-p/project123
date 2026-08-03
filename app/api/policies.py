@@ -15,14 +15,16 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_authenticated_org
-from app.db.models import Org
+from app.db.models import Org, PolicyDecisionSummary
 from app.db.session import get_db
 from app.domain.jurisdictions import list_jurisdictions
 from app.repositories import policies as policy_repo
 from app.schemas import (
+    ComplianceSummaryOut,
     InternalPolicyIn,
     JurisdictionOut,
     PackSubscriptionIn,
+    PolicyDecisionOut,
     PolicyOut,
     RegulationPackOut,
 )
@@ -147,6 +149,83 @@ def get_my_packs(
         _pack_out(pack, enabled=sub.enabled, enforcement=sub.enforcement)
         for pack, sub in pack_service.org_subscriptions(db, org.id)
     ]
+
+
+@router.get("/decisions", response_model=list[PolicyDecisionOut])
+def get_decisions(
+    flagged_only: bool = False,
+    limit: int = 50,
+    org: Org = Depends(get_authenticated_org),
+    db: Session = Depends(get_db),
+) -> list[PolicyDecisionOut]:
+    """Recent policy decisions with their cited findings."""
+    query = db.query(PolicyDecisionSummary).filter(PolicyDecisionSummary.org_id == org.id)
+    if flagged_only:
+        query = query.filter(PolicyDecisionSummary.tier.in_(("orange", "red")))
+    rows = (
+        query.order_by(PolicyDecisionSummary.created_at.desc())
+        .limit(max(1, min(limit, 200)))
+        .all()
+    )
+    return [_decision_out(r) for r in rows]
+
+
+def _decision_out(row: PolicyDecisionSummary) -> PolicyDecisionOut:
+    return PolicyDecisionOut(
+        trace_id=str(row.trace_id),
+        seq=row.seq,
+        action=row.action,
+        tier=row.tier,
+        policy_tier=row.policy_tier,
+        allowed=row.allowed,
+        policy_version=row.policy_version,
+        jurisdictions=list(row.jurisdictions or []),
+        findings=list(row.findings or []),
+        event_hash=row.event_hash,
+        created_at=row.created_at.isoformat(),
+    )
+
+
+@router.get("/compliance-summary", response_model=ComplianceSummaryOut)
+def get_compliance_summary(
+    org: Org = Depends(get_authenticated_org),
+    db: Session = Depends(get_db),
+) -> ComplianceSummaryOut:
+    from sqlalchemy import func
+
+    rows = (
+        db.query(PolicyDecisionSummary.tier, func.count(PolicyDecisionSummary.id))
+        .filter(PolicyDecisionSummary.org_id == org.id)
+        .group_by(PolicyDecisionSummary.tier)
+        .all()
+    )
+    by_tier = {tier: count for tier, count in rows}
+    total = sum(by_tier.values())
+    flagged = by_tier.get("orange", 0) + by_tier.get("red", 0)
+
+    by_jurisdiction: dict[str, int] = {}
+    for (js,) in (
+        db.query(PolicyDecisionSummary.jurisdictions)
+        .filter(PolicyDecisionSummary.org_id == org.id)
+        .all()
+    ):
+        for j in js or []:
+            by_jurisdiction[j] = by_jurisdiction.get(j, 0) + 1
+
+    unverified = sum(
+        1
+        for pack, sub in pack_service.org_subscriptions(db, org.id)
+        if sub.enabled and pack.verification_status == "unverified"
+    )
+    active = policy_repo.get_active_policy(db, org.id)
+    return ComplianceSummaryOut(
+        decisions_total=total,
+        flagged_total=flagged,
+        by_tier=by_tier,
+        by_jurisdiction=by_jurisdiction,
+        unverified_packs=unverified,
+        active_policy_version=active.version if active else None,
+    )
 
 
 @router.post("/packs/subscribe", response_model=RegulationPackOut)

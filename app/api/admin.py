@@ -213,6 +213,18 @@ def _admin_pack_out(pack: RegulationPack) -> RegulationPackOut:
     )
 
 
+@router.get("/orgs/{org_id}/regulation-packs", response_model=list[RegulationPackOut])
+def list_org_packs(org_id: str, db: Session = Depends(get_db)) -> list[RegulationPackOut]:
+    """Which jurisdiction rulebooks currently apply to a customer."""
+    out = []
+    for pack, sub in pack_service.org_subscriptions(db, org_id):
+        item = _admin_pack_out(pack)
+        item.enabled = sub.enabled
+        item.enforcement = sub.enforcement
+        out.append(item)
+    return out
+
+
 @router.post("/orgs/{org_id}/regulation-packs", response_model=RegulationPackOut)
 def subscribe_org_to_pack(
     org_id: str, body: PackSubscriptionIn, db: Session = Depends(get_db)

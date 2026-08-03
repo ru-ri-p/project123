@@ -7,7 +7,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from app.db.models import Org
+from app.db.models import Org, PolicyDecisionSummary
 from app.domain.policy_contract import PolicyInput
 from app.repositories import approvals as approval_repo
 from app.repositories import events as event_repo
@@ -137,6 +137,27 @@ def run_precheck(
         payload=decision_payload,
         policy_version=policy.version,
     )
+
+    # Index the decision for the compliance dashboards. Metadata only — the
+    # signed event above stays authoritative, and for a customer-key org its
+    # payload is unreadable to us, so without this index neither side could see
+    # what was flagged.
+    db.add(
+        PolicyDecisionSummary(
+            org_id=org.id,
+            trace_id=trace_id,
+            seq=event_result.seq,
+            event_hash=event_result.hash,
+            action=action,
+            tier=effective_tier,
+            policy_tier=output.tier,
+            allowed=allowed,
+            policy_version=policy.version,
+            findings=[f.to_dict() for f in findings],
+            jurisdictions=jurisdictions_touched(findings),
+        )
+    )
+    db.flush()
 
     approval_id: str | None = None
     policy_event_id: uuid.UUID | None = None

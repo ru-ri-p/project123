@@ -346,6 +346,38 @@ class OrgRegulationPack(Base):
     )
 
 
+class PolicyDecisionSummary(Base):
+    """Non-sensitive index of policy decisions, for the compliance dashboards.
+
+    The full decision lives in the signed policy_decision event, whose payload is
+    encrypted — and for a customer-key org that payload is dark to Attest, so
+    neither dashboard could read findings back out of it. This table stores only
+    metadata that is NOT customer content: risk tier, which rulebooks fired, and
+    which rule ids. No payload, no PII, nothing that would weaken the darkness
+    guarantee. The event remains the authoritative record; this is an index.
+    """
+
+    __tablename__ = "policy_decision_summaries"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    org_id: Mapped[str] = mapped_column(Text, ForeignKey("orgs.id"), nullable=False, index=True)
+    trace_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    seq: Mapped[int] = mapped_column(Integer, nullable=False)
+    event_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    action: Mapped[str] = mapped_column(Text, nullable=False)
+    tier: Mapped[str] = mapped_column(String(16), nullable=False)
+    policy_tier: Mapped[str] = mapped_column(String(16), nullable=False)
+    allowed: Mapped[bool] = mapped_column(nullable=False)
+    policy_version: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # [{pack_code, jurisdiction, instrument, rule_id, tier, topic, provision,
+    #   verification_status, advisory_only}] — rule identifiers only.
+    findings: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False)
+    jurisdictions: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
 class OrgSigningKey(Base):
     """A per-org signing key. The 'active' key signs new events; retired keys keep
     verifying the events they signed (the key-id is recorded on each event).

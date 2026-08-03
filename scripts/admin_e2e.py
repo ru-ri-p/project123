@@ -55,7 +55,8 @@ def main() -> None:
         customer.wait_for_selector("#keygenout", state="visible", timeout=30000)
         priv_pem = customer.evaluate("keypairPems.priv")
         customer.click("#btn-enable")
-        customer.wait_for_selector("#enablestatus", state="visible", timeout=5000)
+        # Going dark hides the setup card by design; assert the real end state.
+        customer.wait_for_selector("#keycustody >> text=ACTIVE", timeout=10000)
         ok(True, "customer: connected, keygen, customer-key enabled")
 
         # --- Customer records two dark events (the SDK path) -------------------
