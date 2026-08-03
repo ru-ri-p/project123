@@ -52,7 +52,8 @@ def main() -> None:
         admin.fill("#gate-key", "wrong-key")
         admin.click("#gate-connect")
         admin.wait_for_selector("#gate-msg >> text=rejected", timeout=8000)
-        ok(admin.is_visible("#gate"), "admin: a rejected key keeps the gate up with a clear message")
+        ok(admin.is_visible("#gate"),
+           "admin: a rejected key keeps the gate up with a clear message")
 
         # --- Admin: publish packs and apply DIFC Reg 10 to the customer --------
         admin.fill("#gate-key", ADMIN_KEY)
