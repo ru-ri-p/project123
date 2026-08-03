@@ -18,16 +18,21 @@ from app.api.deps import get_authenticated_org
 from app.db.models import Org, PolicyDecisionSummary
 from app.db.session import get_db
 from app.domain.jurisdictions import list_jurisdictions
+from app.domain.sectors import grouped_sectors
 from app.repositories import policies as policy_repo
 from app.schemas import (
     ComplianceSummaryOut,
     InternalPolicyIn,
     JurisdictionOut,
+    OrgProfileIn,
+    OrgProfileOut,
     PackSubscriptionIn,
     PolicyDecisionOut,
     PolicyOut,
+    ProfileUpdateOut,
     RegulationPackOut,
 )
+from app.services import org_profile as profile_service
 from app.services import regulation_packs as pack_service
 from app.services.precheck import NoActivePolicyError
 
@@ -237,12 +242,20 @@ def subscribe_pack(
     org: Org = Depends(get_authenticated_org),
     db: Session = Depends(get_db),
 ) -> RegulationPackOut:
+    """Voluntarily adopt an ADDITIONAL rulebook beyond what the profile requires.
+
+    Deliberately add-only: there is no unsubscribe. Obligations follow from the
+    profile (jurisdictions x sectors), so a firm cannot drop a rulebook it is
+    subject to — that would be cherry-picking its way to a clean dashboard, which
+    is precisely what the profile model exists to prevent. Taking on MORE than
+    required is not evasion, so it is allowed and instant.
+    """
     try:
         sub = pack_service.subscribe_org(
             db,
             org_id=org.id,
             pack_code=body.pack_code,
-            enabled=body.enabled,
+            enabled=True,
             enforcement=body.enforcement,
         )
     except pack_service.PackError as exc:
@@ -251,3 +264,67 @@ def subscribe_pack(
     pack = pack_service.latest_pack_by_code(db, body.pack_code)
     assert pack is not None
     return _pack_out(pack, enabled=sub.enabled, enforcement=sub.enforcement)
+
+
+# --- Settings: the institution's profile --------------------------------------
+
+
+@router.get("/sectors")
+def get_sector_taxonomy() -> dict[str, object]:
+    """The sector list for the settings page, grouped, with ISIC mappings."""
+    return {"groups": grouped_sectors()}
+
+
+@router.get("/profile", response_model=OrgProfileOut)
+def get_org_profile(
+    org: Org = Depends(get_authenticated_org),
+    db: Session = Depends(get_db),
+) -> OrgProfileOut:
+    return OrgProfileOut(**profile_service.profile_summary(db, org))  # type: ignore[arg-type]
+
+
+@router.put("/profile", response_model=ProfileUpdateOut)
+def put_org_profile(
+    body: OrgProfileIn,
+    org: Org = Depends(get_authenticated_org),
+    db: Session = Depends(get_db),
+) -> ProfileUpdateOut:
+    """Declare where you are licensed and what you do.
+
+    Adding applies immediately. Removing raises a request for Attest to approve —
+    obligations may be taken on freely, but not dropped unilaterally.
+    """
+    try:
+        profile, request = profile_service.set_profile(
+            db,
+            org_id=org.id,
+            jurisdictions=body.jurisdictions,
+            sectors=body.sectors,
+            actor=body.updated_by or "customer",
+            reason=body.reason or "",
+        )
+    except (profile_service.ProfileError, ValueError) as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    db.commit()
+
+    if request is not None:
+        return ProfileUpdateOut(
+            applied=False,
+            pending_approval=True,
+            removed=list(request.removed),
+            request_id=str(request.id),
+            message=(
+                "Removing a jurisdiction or sector needs Attest's approval. Your "
+                "current obligations remain in force until it is reviewed."
+            ),
+            profile=OrgProfileOut(**profile_service.profile_summary(db, org)),  # type: ignore[arg-type]
+        )
+    assert profile is not None
+    return ProfileUpdateOut(
+        applied=True,
+        pending_approval=False,
+        removed=[],
+        message="Profile updated. Rulebooks have been applied automatically.",
+        profile=OrgProfileOut(**profile_service.profile_summary(db, org)),  # type: ignore[arg-type]
+    )

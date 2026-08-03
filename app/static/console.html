@@ -303,6 +303,56 @@
       </div>
     </section>
 
+    <!-- ==================== SETTINGS ==================== -->
+    <section class="screen" id="scr-settings">
+      <h1>Settings</h1>
+      <div class="sub">Where you are licensed and what you do. Your obligations follow from this.</div>
+
+      <div class="banner amber" style="margin-bottom:18px;">
+        <b>Rulebooks are derived, not chosen.</b> Attest works out which regulations apply from
+        your profile — you cannot pick and choose among them. Adding a jurisdiction or sector takes
+        effect immediately; <b>removing one needs Attest's approval</b>, and your current
+        obligations stay in force until it is reviewed.
+      </div>
+
+      <div class="card" style="margin-bottom:14px;">
+        <div class="eyebrow" style="margin-bottom:10px;">WHERE YOU ARE LICENSED</div>
+        <div class="kv2" style="margin-bottom:10px;">A bank in the DIFC answers to the DFSA; an
+          onshore bank answers to the Central Bank. Select every jurisdiction you operate in.</div>
+        <div id="set-jurisdictions"></div>
+      </div>
+
+      <div class="card" style="margin-bottom:14px;">
+        <div class="row">
+          <div class="eyebrow">WHAT YOU DO</div>
+          <span class="kv2" style="margin-left:auto;">classified to ISIC Rev.4</span>
+        </div>
+        <div class="kv2" style="margin:6px 0 10px;">Select every sector you operate in. Choose more
+          than one if that is the truth of your business.</div>
+        <div id="set-sectors"></div>
+      </div>
+
+      <div class="card" style="margin-bottom:14px;">
+        <div class="eyebrow" style="margin-bottom:10px;">RULEBOOKS THIS IMPLIES</div>
+        <div id="set-derived"><div class="empty">Select a jurisdiction and a sector.</div></div>
+      </div>
+
+      <div class="card">
+        <div id="set-reasonbox" style="display:none;margin-bottom:12px;">
+          <div class="banner red" style="margin-top:0;">
+            <b>This change removes obligations.</b> <span id="set-removed"></span>
+            It will be sent to Attest for approval, and nothing changes until then.
+          </div>
+          <label>Why are you removing this?</label>
+          <input class="field" id="set-reason" placeholder="e.g. the DIFC entity was wound up in June">
+        </div>
+        <div class="row">
+          <button class="btn primary" id="btn-save-profile">Save profile</button>
+          <span class="kv2" id="set-status"></span>
+        </div>
+      </div>
+    </section>
+
     <!-- ==================== KEYS & CUSTODY ==================== -->
     <section class="screen" id="scr-keys">
       <h1>Keys &amp; Custody</h1>
@@ -387,7 +437,7 @@ async function regrant(privKey, wrappedForOrgB64, granteePubKey) {
 let keypairPems = { priv: null, pub: null };
 
 /* ---------- nav ---------- */
-const SCREENS = [["overview","Overview"],["requests","Consent Requests"],["compliance","Compliance"],["trace","Audit Records"],["keys","Keys & Custody"]];
+const SCREENS = [["overview","Overview"],["requests","Consent Requests"],["compliance","Compliance"],["trace","Audit Records"],["settings","Settings"],["keys","Keys & Custody"]];
 function go(k) {
   document.querySelectorAll("nav.screens button").forEach((b) => b.classList.toggle("on", b.dataset.k === k));
   document.querySelectorAll(".screen").forEach((s) => s.classList.toggle("on", s.id === "scr-" + k));
@@ -411,7 +461,7 @@ async function connect() {
     $("#orgbadge").innerHTML = `<b>${esc(ov.name)}</b><br><span class="mono" style="font-size:11px;color:var(--faint);">${esc(ov.org_id)}</span>`;
     $("#connstate").textContent = "Connected.";
     $("#keyform").style.display = "none";
-    renderOverview(ov); loadRequests(); loadTraces(); renderCustody(ov); loadCompliance();
+    renderOverview(ov); loadRequests(); loadTraces(); renderCustody(ov); loadCompliance(); loadSettings();
     toast("Connected as " + ov.name, "ok");
   } catch (e) {
     $("#connstate").textContent = "Connection failed.";
@@ -867,6 +917,114 @@ $("#btn-save-policy").addEventListener("click", async () => {
     toast(`Policy ${p.version} published and active.`, "ok");
     loadSummary();
   } catch (e) { toast("Publish failed: " + e.message, "err"); }
+});
+
+/* ---------- settings: jurisdictions x sectors ---------- */
+const JURISDICTION_CHOICES = [
+  ["difc", "Dubai International Financial Centre", "DFSA · DIFC Commissioner of Data Protection"],
+  ["adgm", "Abu Dhabi Global Market", "FSRA · ADGM Office of Data Protection"],
+  ["uae_onshore", "UAE onshore (federal)", "CBUAE · SCA · UAE Data Office"],
+];
+let profileState = { jurisdictions: new Set(), sectors: new Set(), saved: null, taxonomy: [] };
+
+async function loadSettings() {
+  try {
+    const [tax, profile] = await Promise.all([
+      api.call("/v1/policies/sectors"),
+      api.call("/v1/policies/profile"),
+    ]);
+    profileState.taxonomy = tax.groups;
+    profileState.saved = profile;
+    profileState.jurisdictions = new Set(profile.jurisdictions || []);
+    profileState.sectors = new Set(profile.sectors || []);
+    renderSettings();
+  } catch (e) { toast("Settings failed: " + e.message, "err"); }
+}
+
+function renderSettings() {
+  $("#set-jurisdictions").innerHTML = JURISDICTION_CHOICES.map(([code, name, regs]) => `
+    <div class="rec ${profileState.jurisdictions.has(code) ? "on" : ""}" data-juris="${code}">
+      <span class="box">${profileState.jurisdictions.has(code) ? "✓" : ""}</span>
+      <div style="flex:1;">
+        <div style="font-weight:600;font-size:13.5px;">${esc(name)}</div>
+        <div class="kv2">${esc(regs)}</div>
+      </div>
+    </div>`).join("");
+
+  $("#set-sectors").innerHTML = profileState.taxonomy.map((g) => `
+    <div style="margin-bottom:14px;">
+      <div class="eyebrow" style="margin-bottom:6px;">${esc(g.group).toUpperCase()}</div>
+      ${g.sectors.map((s) => `
+        <div class="rec ${profileState.sectors.has(s.code) ? "on" : ""}" data-sector="${esc(s.code)}">
+          <span class="box">${profileState.sectors.has(s.code) ? "✓" : ""}</span>
+          <div style="flex:1;min-width:0;">
+            <div style="font-weight:600;font-size:13.5px;">${esc(s.name)}
+              <span class="kv2" style="font-weight:400;">· ISIC ${esc(s.isic)}</span></div>
+            <div class="kv2">${esc(s.description)}${s.regulators.length
+              ? " · " + esc(s.regulators.join(", ")) : ""}</div>
+          </div>
+        </div>`).join("")}
+    </div>`).join("");
+
+  document.querySelectorAll("[data-juris]").forEach((el) => el.addEventListener("click", () => {
+    const c = el.dataset.juris;
+    profileState.jurisdictions.has(c) ? profileState.jurisdictions.delete(c)
+                                      : profileState.jurisdictions.add(c);
+    renderSettings(); previewDerived();
+  }));
+  document.querySelectorAll("[data-sector]").forEach((el) => el.addEventListener("click", () => {
+    const c = el.dataset.sector;
+    profileState.sectors.has(c) ? profileState.sectors.delete(c) : profileState.sectors.add(c);
+    renderSettings(); previewDerived();
+  }));
+  previewDerived();
+}
+
+function previewDerived() {
+  // What is being removed relative to what is saved — shown before they submit,
+  // so the approval requirement is never a surprise.
+  const saved = profileState.saved || { jurisdictions: [], sectors: [] };
+  const removed = [
+    ...(saved.jurisdictions || []).filter((j) => !profileState.jurisdictions.has(j)),
+    ...(saved.sectors || []).filter((s) => !profileState.sectors.has(s)),
+  ];
+  $("#set-reasonbox").style.display = removed.length ? "block" : "none";
+  $("#set-removed").textContent = removed.length
+    ? "Removing: " + removed.join(", ") + "." : "";
+
+  const box = $("#set-derived");
+  if (!profileState.jurisdictions.size || !profileState.sectors.size) {
+    box.innerHTML = '<div class="empty">Select at least one jurisdiction and one sector.</div>';
+    return;
+  }
+  const current = (profileState.saved && profileState.saved.mandatory_pack_codes) || [];
+  box.innerHTML = current.length
+    ? `<div class="kv2" style="margin-bottom:8px;">Currently applied from your saved profile:</div>` +
+      current.map((c) => `<span class="chip blue" style="margin:0 6px 6px 0;">${esc(c)}</span>`).join("") +
+      `<div class="kv2" style="margin-top:8px;">Save to recalculate.</div>`
+    : '<div class="empty">Save the profile to apply the rulebooks it implies.</div>';
+}
+
+$("#btn-save-profile").addEventListener("click", async () => {
+  const jurisdictions = [...profileState.jurisdictions];
+  const sectors = [...profileState.sectors];
+  if (!jurisdictions.length || !sectors.length) {
+    toast("Select at least one jurisdiction and one sector.", "err"); return;
+  }
+  const body = { jurisdictions, sectors, updated_by: "customer" };
+  const reason = $("#set-reason").value.trim();
+  if (reason) body.reason = reason;
+  try {
+    const out = await api.call("/v1/policies/profile", { method: "PUT", body });
+    profileState.saved = out.profile;
+    profileState.jurisdictions = new Set(out.profile.jurisdictions);
+    profileState.sectors = new Set(out.profile.sectors);
+    $("#set-reason").value = "";
+    $("#set-status").textContent = out.message;
+    toast(out.message, out.pending_approval ? "err" : "ok");
+    renderSettings();
+    loadMyPacks(); loadSummary();
+  } catch (e) { toast("Save failed: " + e.message, "err"); }
 });
 
 /* ---------- audit records ---------- */

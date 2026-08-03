@@ -299,6 +299,55 @@ class AccessGrantKey(Base):
     wrapped_key_b64: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
+class OrgProfile(Base):
+    """Where an institution is licensed and what it does.
+
+    This is the anti-evasion mechanism. Obligations are DERIVED from the profile
+    rather than picked from a menu — a firm cannot adopt the data-protection
+    rulebook, skip the conduct one, and show a clean dashboard.
+
+    Adding a jurisdiction or sector takes effect immediately: taking on more
+    obligations is never the thing to guard against. REMOVING one requires Attest
+    to approve, because that is the move that sheds obligations, and it is
+    recorded either way.
+    """
+
+    __tablename__ = "org_profiles"
+
+    org_id: Mapped[str] = mapped_column(Text, ForeignKey("orgs.id"), primary_key=True)
+    jurisdictions: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    sectors: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_by: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class ProfileChangeRequest(Base):
+    """A request to REMOVE a jurisdiction or sector — needs Attest's approval.
+
+    Additions never come through here; they apply at once. Only reductions do,
+    because only reductions shed obligations.
+    """
+
+    __tablename__ = "profile_change_requests"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    org_id: Mapped[str] = mapped_column(Text, ForeignKey("orgs.id"), nullable=False, index=True)
+    requested_by: Mapped[str] = mapped_column(Text, nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    # The profile as it would be if approved.
+    proposed_jurisdictions: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    proposed_sectors: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    removed: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, server_default="pending")
+    decided_by: Mapped[str | None] = mapped_column(Text, nullable=True)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
 class SdkDevice(Base):
     """An SDK instance's own signing key, registered automatically on first run.
 

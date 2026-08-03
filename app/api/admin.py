@@ -30,10 +30,12 @@ from app.schemas import (
     DailyCount,
     EventReplayItem,
     PackSubscriptionIn,
+    ProfileChangeRequestOut,
     RegulationPackOut,
     TraceReplayOut,
 )
 from app.services import access_review
+from app.services import org_profile as profile_service
 from app.services import orgs as org_service
 from app.services import regulation_packs as pack_service
 from app.services.access import TraceNotFoundError
@@ -246,6 +248,58 @@ def subscribe_org_to_pack(
     pack = pack_service.latest_pack_by_code(db, body.pack_code)
     assert pack is not None
     return _admin_pack_out(pack)
+
+
+# --- Profile change requests (the anti-evasion control) -----------------------
+
+
+@router.get("/profile-changes", response_model=list[ProfileChangeRequestOut])
+def list_profile_changes(db: Session = Depends(get_db)) -> list[ProfileChangeRequestOut]:
+    """Customers asking to DROP a jurisdiction or sector — i.e. shed obligations.
+
+    Additions never appear here; they apply immediately. Only reductions need a
+    decision, because only reductions reduce what the customer is checked against.
+    """
+    return [
+        ProfileChangeRequestOut(
+            id=str(r.id),
+            org_id=r.org_id,
+            requested_by=r.requested_by,
+            reason=r.reason,
+            removed=list(r.removed or []),
+            proposed_jurisdictions=list(r.proposed_jurisdictions or []),
+            proposed_sectors=list(r.proposed_sectors or []),
+            status=r.status,
+            created_at=r.created_at.isoformat(),
+        )
+        for r in profile_service.pending_change_requests(db)
+    ]
+
+
+@router.post("/profile-changes/{request_id}/decide", response_model=ProfileChangeRequestOut)
+def decide_profile_change(
+    request_id: str, approve: bool = True, db: Session = Depends(get_db)
+) -> ProfileChangeRequestOut:
+    try:
+        req = profile_service.decide_change_request(
+            db, request_id=str(_parse_uuid(request_id)), approve=approve,
+            decided_by="attest_admin",
+        )
+    except profile_service.ProfileError as exc:
+        db.rollback()
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    db.commit()
+    return ProfileChangeRequestOut(
+        id=str(req.id),
+        org_id=req.org_id,
+        requested_by=req.requested_by,
+        reason=req.reason,
+        removed=list(req.removed or []),
+        proposed_jurisdictions=list(req.proposed_jurisdictions or []),
+        proposed_sectors=list(req.proposed_sectors or []),
+        status=req.status,
+        created_at=req.created_at.isoformat(),
+    )
 
 
 # --- Access requests ----------------------------------------------------------

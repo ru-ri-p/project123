@@ -222,6 +222,50 @@ class RegulationPackOut(BaseModel):
     enforcement: str | None = None
 
 
+class OrgProfileIn(BaseModel):
+    """Where the institution is licensed, and what it does."""
+
+    jurisdictions: list[str] = Field(min_length=1)
+    sectors: list[str] = Field(min_length=1)
+    reason: str | None = Field(
+        default=None,
+        description="Required only when the change removes a jurisdiction or sector.",
+    )
+    updated_by: str | None = None
+
+
+class OrgProfileOut(BaseModel):
+    org_id: str
+    configured: bool
+    jurisdictions: list[str] = Field(default_factory=list)
+    sectors: list[str] = Field(default_factory=list)
+    updated_at: str | None = None
+    updated_by: str | None = None
+    mandatory_pack_codes: list[str] = Field(default_factory=list)
+    pending_changes: int = 0
+
+
+class ProfileUpdateOut(BaseModel):
+    applied: bool
+    pending_approval: bool
+    removed: list[str] = Field(default_factory=list)
+    message: str
+    request_id: str | None = None
+    profile: OrgProfileOut
+
+
+class ProfileChangeRequestOut(BaseModel):
+    id: str
+    org_id: str
+    requested_by: str
+    reason: str
+    removed: list[str] = Field(default_factory=list)
+    proposed_jurisdictions: list[str] = Field(default_factory=list)
+    proposed_sectors: list[str] = Field(default_factory=list)
+    status: str
+    created_at: str
+
+
 class PackSubscriptionIn(BaseModel):
     pack_code: str = Field(min_length=1)
     enabled: bool = True

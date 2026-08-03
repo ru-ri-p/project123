@@ -25,6 +25,11 @@ def upsert_pack(db: Session, doc: dict[str, Any]) -> RegulationPack:
         "schema_version": doc.get("schema_version", 2),
         "engine": doc.get("engine", "json"),
         "rules": doc.get("rules", []),
+        # Targeting must be persisted, not just declared in the source module —
+        # it is what decides whether a pack reaches a given institution, and
+        # profile matching reads it back from here.
+        "jurisdictions": doc.get("jurisdictions") or [doc["jurisdiction"]],
+        "sectors": doc.get("sectors") or ["*"],
     }
     if existing is not None:
         existing.name = doc["name"]
