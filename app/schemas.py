@@ -189,6 +189,52 @@ class PrecheckOut(BaseModel):
     risk_score: int = 0
     layer_results: list[dict[str, Any]] = Field(default_factory=list)
     mitigations: list[str] = Field(default_factory=list)
+    # Tier from the institution's OWN policy, before advisory jurisdiction
+    # findings were layered on. Kept distinct so a customer can see which of the
+    # two raised the risk.
+    policy_tier: RiskTier | None = None
+    jurisdictions: list[str] = Field(default_factory=list)
+    regulatory_findings: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class JurisdictionOut(BaseModel):
+    code: str
+    name: str
+    regulators: list[str]
+    summary: str
+    official_sources: list[str]
+
+
+class RegulationPackOut(BaseModel):
+    id: str
+    code: str
+    jurisdiction: str
+    name: str
+    version: str
+    instrument: str
+    instrument_notes: str | None = None
+    source_url: str | None = None
+    effective_date: str | None = None
+    verification_status: str
+    reviewed_by: str | None = None
+    rule_count: int
+    enabled: bool | None = None  # set when listed in an org context
+    enforcement: str | None = None
+
+
+class PackSubscriptionIn(BaseModel):
+    pack_code: str = Field(min_length=1)
+    enabled: bool = True
+    enforcement: Literal["advisory"] = "advisory"  # blocking reserved for post-review
+
+
+class InternalPolicyIn(BaseModel):
+    """The institution authors its own policy; Attest does not supply it."""
+
+    name: str = Field(min_length=1)
+    version: str = Field(min_length=1, max_length=32)
+    rules: dict[str, Any]
+    activate: bool = True
 
 
 class ConfidentialityIn(BaseModel):

@@ -15,6 +15,7 @@ from app.repositories import policies as policy_repo
 from app.services.events import EventSequenceError, record_event
 from app.services.policy.evaluator import evaluate_policy_input
 from app.services.policy.features import extract_features
+from app.services.policy.packs import combined_tier, evaluate_packs, jurisdictions_touched
 from app.services.policy.rules import PolicyEngineError
 from app.services.policy.tiers import RiskTier
 
@@ -90,11 +91,25 @@ def run_precheck(
             layer_results=(),
         )
 
+    # Jurisdiction layer: the institution's own policy decided above; regulation
+    # packs now add cited findings on top. Advisory in the MVP — a finding can
+    # raise the risk tier (strictest wins) but never flips an allow into a deny.
+    findings = evaluate_packs(
+        db, org_id=org.id, action=action, payload=payload, features=features
+    )
+    effective_tier = combined_tier(output.tier, findings)
+
+    # The allow/deny decision is computed from the INSTITUTION'S OWN policy tier
+    # only. Advisory findings raise the reported tier (and can route the action
+    # to a human approver) but must never turn an allow into a deny: pack content
+    # has not had legal review, and a drafting error must not stop the customer's
+    # business. Blocking on packs is a deliberate later decision, per pack.
     allowed = tier_allows_action(output.tier, fail_mode=org.fail_mode, allowed=output.allowed)
 
     decision_payload: dict[str, Any] = {
         "action": action,
-        "tier": output.tier,
+        "tier": effective_tier,
+        "policy_tier": output.tier,
         "decision": output.decision,
         "allowed": allowed,
         "reasons": list(output.reasons),
@@ -106,6 +121,11 @@ def run_precheck(
         "features": features.to_dict(),
         "layer_results": [layer.to_dict() for layer in output.layer_results],
         "mitigations": list(output.mitigations),
+        # Sealed into the signed policy_decision event: which jurisdictional
+        # rulebook was applied, citing what, and how well verified. This is what
+        # makes the rulebook itself auditable after the fact.
+        "jurisdictions": jurisdictions_touched(findings),
+        "regulatory_findings": [f.to_dict() for f in findings],
     }
 
     event_result = record_event(
@@ -123,7 +143,7 @@ def run_precheck(
     if event_result.event_id:
         policy_event_id = uuid.UUID(event_result.event_id)
 
-    if output.tier in TIERS_REQUIRING_APPROVAL:
+    if effective_tier in TIERS_REQUIRING_APPROVAL:
         approval = approval_repo.create_approval(
             db,
             org_id=org.id,
@@ -134,7 +154,8 @@ def run_precheck(
 
     return {
         "trace_id": str(trace_id),
-        "tier": output.tier,
+        "tier": effective_tier,
+        "policy_tier": output.tier,
         "decision": output.decision,
         "allowed": allowed,
         "reasons": list(output.reasons),
@@ -147,6 +168,8 @@ def run_precheck(
         "risk_score": output.risk_score,
         "layer_results": [layer.to_dict() for layer in output.layer_results],
         "mitigations": list(output.mitigations),
+        "jurisdictions": jurisdictions_touched(findings),
+        "regulatory_findings": [f.to_dict() for f in findings],
     }
 
 

@@ -290,6 +290,62 @@ class AccessGrantKey(Base):
     wrapped_key_b64: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
+class RegulationPack(Base):
+    """A versioned rulebook for one jurisdiction, published by Attest.
+
+    Separate from Policy (which is the institution's OWN policy, authored by the
+    institution). Packs are advisory in the MVP: they raise findings and cite the
+    instrument, they do not block. verification_status travels with every finding
+    so an unreviewed rule can never pass for a settled legal position.
+    """
+
+    __tablename__ = "regulation_packs"
+    __table_args__ = (
+        UniqueConstraint("code", "version", name="uq_regulation_pack_code_version"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    code: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    jurisdiction: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    version: Mapped[str] = mapped_column(String(32), nullable=False)
+    instrument: Mapped[str] = mapped_column(Text, nullable=False)
+    instrument_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    effective_date: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # unverified | self_reviewed | counsel_reviewed
+    verification_status: Mapped[str] = mapped_column(
+        String(32), nullable=False, server_default="unverified"
+    )
+    reviewed_by: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    rules: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class OrgRegulationPack(Base):
+    """Which packs apply to an org. An institution may span several jurisdictions."""
+
+    __tablename__ = "org_regulation_packs"
+
+    org_id: Mapped[str] = mapped_column(Text, ForeignKey("orgs.id"), primary_key=True)
+    pack_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("regulation_packs.id"), primary_key=True
+    )
+    # advisory = raise findings only (MVP). blocking reserved for a later slice,
+    # once rule content has had legal review — a bad rule that blocks stops the
+    # customer's business.
+    enforcement: Mapped[str] = mapped_column(
+        String(16), nullable=False, server_default="advisory"
+    )
+    enabled: Mapped[bool] = mapped_column(nullable=False, server_default="true")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
 class OrgSigningKey(Base):
     """A per-org signing key. The 'active' key signs new events; retired keys keep
     verifying the events they signed (the key-id is recorded on each event).

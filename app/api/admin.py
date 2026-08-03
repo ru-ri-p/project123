@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import require_admin
 from app.auth import hash_api_key
-from app.db.models import AccessGrantKey, AccessRequest, Event, Org, Trace
+from app.db.models import AccessGrantKey, AccessRequest, Event, Org, RegulationPack, Trace
 from app.db.session import get_db
 from app.schemas import (
     AdminOrgActivity,
@@ -29,10 +29,13 @@ from app.schemas import (
     AdminTraceEventOut,
     DailyCount,
     EventReplayItem,
+    PackSubscriptionIn,
+    RegulationPackOut,
     TraceReplayOut,
 )
 from app.services import access_review
 from app.services import orgs as org_service
+from app.services import regulation_packs as pack_service
 from app.services.access import TraceNotFoundError
 from app.services.replay import replay_trace
 from app.services.verification import TraceReplayResult
@@ -166,6 +169,71 @@ def rotate_org_key(org_id: str, db: Session = Depends(get_db)) -> AdminOrgKeyOut
     org.api_key_hash = hash_api_key(plaintext_key)
     db.commit()
     return AdminOrgKeyOut(org_id=org_id, api_key=plaintext_key)
+
+
+# --- Regulation packs ---------------------------------------------------------
+
+
+@router.post("/regulation-packs/seed", response_model=list[RegulationPackOut])
+def seed_packs(db: Session = Depends(get_db)) -> list[RegulationPackOut]:
+    """Publish the bundled starter packs. Idempotent on (code, version).
+
+    Everything published this way is `unverified` — drafted from public sources,
+    not transcribed from official texts. It must not be presented to a customer
+    as a settled legal position until reviewed.
+    """
+    packs = pack_service.seed_builtin_packs(db)
+    db.commit()
+    return [_admin_pack_out(p) for p in packs]
+
+
+@router.get("/regulation-packs", response_model=list[RegulationPackOut])
+def list_regulation_packs(
+    jurisdiction: str | None = None, db: Session = Depends(get_db)
+) -> list[RegulationPackOut]:
+    return [_admin_pack_out(p) for p in pack_service.list_packs(db, jurisdiction)]
+
+
+def _admin_pack_out(pack: RegulationPack) -> RegulationPackOut:
+    doc = pack.rules if isinstance(pack.rules, dict) else {}
+    rules = doc.get("rules", [])
+    return RegulationPackOut(
+        id=str(pack.id),
+        code=pack.code,
+        jurisdiction=pack.jurisdiction,
+        name=pack.name,
+        version=pack.version,
+        instrument=pack.instrument,
+        instrument_notes=pack.instrument_notes,
+        source_url=pack.source_url,
+        effective_date=pack.effective_date,
+        verification_status=pack.verification_status,
+        reviewed_by=pack.reviewed_by,
+        rule_count=len(rules) if isinstance(rules, list) else 0,
+    )
+
+
+@router.post("/orgs/{org_id}/regulation-packs", response_model=RegulationPackOut)
+def subscribe_org_to_pack(
+    org_id: str, body: PackSubscriptionIn, db: Session = Depends(get_db)
+) -> RegulationPackOut:
+    """Apply a jurisdiction pack to a customer (ops-side onboarding)."""
+    if db.query(Org).filter(Org.id == org_id).one_or_none() is None:
+        raise HTTPException(status_code=404, detail="org not found")
+    try:
+        pack_service.subscribe_org(
+            db,
+            org_id=org_id,
+            pack_code=body.pack_code,
+            enabled=body.enabled,
+            enforcement=body.enforcement,
+        )
+    except pack_service.PackError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    db.commit()
+    pack = pack_service.latest_pack_by_code(db, body.pack_code)
+    assert pack is not None
+    return _admin_pack_out(pack)
 
 
 # --- Access requests ----------------------------------------------------------
