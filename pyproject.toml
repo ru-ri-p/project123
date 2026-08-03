@@ -7,14 +7,18 @@ name = "attest-sdk"
 version = "0.1.0"
 description = "Attest Python SDK — record tamper-evident, signed provenance events for AI workflows."
 requires-python = ">=3.11"
-dependencies = ["requests>=2.32.0"]
+# cryptography is a BASE dependency, not an extra: offline resilience is on by
+# default (an Attest outage must not create a hole in the audit trail), and it
+# needs the device signing key and the encrypted local buffer. Making it opt-in
+# would mean the safe behaviour is the one nobody installs.
+dependencies = ["requests>=2.32.0", "cryptography>=43.0.0"]
 readme = "attest_sdk/README.md"
 
-# The base client is provenance-only and needs just `requests`. The consent
-# ceremony (org-side private-key operations) additionally needs `cryptography`:
-#   pip install "attest-sdk[consent]"
+# Kept so existing `attest-sdk[consent]` installs keep working; it now resolves
+# to the same set as the base install.
 [project.optional-dependencies]
 consent = ["cryptography>=43.0.0"]
+offline = ["cryptography>=43.0.0"]
 
 [tool.setuptools]
 packages = ["attest_sdk", "attest_sdk.policy"]

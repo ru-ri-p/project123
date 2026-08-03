@@ -61,9 +61,32 @@ step1 = attest.gate({"draft": draft})
 attest.gate({"tool": "price_lookup", "result": price}, action="tool_call", trace=step1.trace_id)
 ```
 
-**If Attest is down**, `gate()` returns a result with `recorded=False` rather
-than raising, so an outage on our side cannot take down your application. Pass
-`on_error="raise"` if you would rather handle it yourself.
+## If Attest goes down
+
+An outage on our side must not take down your application **or** put a hole in
+your audit trail. Both are handled, with no configuration:
+
+- **You keep serving.** `gate()` never raises on an outage (pass
+  `on_error="raise"` if you would rather it did).
+- **You still get a verdict.** The SDK caches your policy *and* your adopted
+  jurisdiction rulebooks, and evaluates locally — so the same output gets the
+  same answer whether or not we are reachable. `result.offline` marks it as
+  provisional.
+- **Nothing is lost.** The event is queued in an encrypted file under
+  `~/.attest`, signed by a key this SDK generated for itself on first run. It
+  survives process restarts. `result.buffered` is True.
+- **It heals itself.** The next successful `gate()` hands the backlog over
+  automatically; Attest verifies each signature and the local chain before
+  recording anything. Force it with `attest.flush_offline()`, and check
+  `attest.pending_offline` (0 in steady state).
+
+Grafted events are marked **deferred** and carry both your system's claimed time
+and the time Attest recorded them — the gap is evidenced, never presented as
+real-time. The device signature means an event cannot be edited or quietly
+dropped from a submitted segment; it does not (and cannot) prove your clock.
+
+Call `attest.prepare_offline()` at startup to be ready before your first
+request. Point the state elsewhere with `state_dir=` or `ATTEST_STATE_DIR`.
 
 ## Lower-level API (provenance: 2 calls)
 

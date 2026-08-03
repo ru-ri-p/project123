@@ -14,6 +14,7 @@ from app.api.mitigations import router as mitigations_router
 from app.api.orgs import router as orgs_router
 from app.api.policies import router as policies_router
 from app.api.precheck import router as precheck_router
+from app.api.sdk import router as sdk_router
 from app.api.traces import router as traces_router
 from app.config import get_settings
 from app.crypto.signing_provider import SigningKeyError, get_signing_provider
@@ -40,6 +41,7 @@ app.include_router(orgs_router)
 app.include_router(erasure_router)
 app.include_router(approvals_router)
 app.include_router(precheck_router)
+app.include_router(sdk_router)
 app.include_router(policies_router)
 app.include_router(mitigations_router)
 app.include_router(access_router)

@@ -33,7 +33,14 @@ class GateResult:
     output_seq: int | None = None
     decision_seq: int | None = None
     approval_id: str | None = None
+    # recorded — Attest has it, signed and chained.
+    # buffered — Attest was unreachable; it is queued locally, signed by this
+    #            device, and will be grafted in on recovery.
+    # offline  — the verdict was computed locally against cached rules, so it is
+    #            provisional until the server re-evaluates it.
     recorded: bool = True
+    buffered: bool = False
+    offline: bool = False
     error: str | None = None
 
     # --- convenience -------------------------------------------------------
@@ -60,13 +67,32 @@ class GateResult:
         """One line for your logs."""
         if self.status == ERROR:
             return f"attest: not recorded ({self.error})"
+        where = "buffered offline" if self.buffered else "recorded"
         if self.status == UNEVALUATED:
-            return f"attest: recorded, not evaluated (trace {self.trace_id})"
+            return f"attest: {where}, not evaluated (trace {self.trace_id})"
         cited = ", ".join(
             f"{f.get('jurisdiction', '?')}:{f.get('rule_id', '?')}" for f in self.findings
         )
         tail = f" [{cited}]" if cited else ""
-        return f"attest: {self.status} (tier {self.tier}, trace {self.trace_id}){tail}"
+        provisional = " (provisional, offline)" if self.offline else ""
+        return f"attest: {self.status}{provisional} · {where} (tier {self.tier}){tail}"
+
+    @classmethod
+    def from_offline(cls, verdict: dict[str, Any], trace_id: str) -> GateResult:
+        """A verdict reached locally while Attest was unreachable, durably queued."""
+        return cls(
+            status=verdict["status"],
+            allowed=bool(verdict.get("allowed", True)),
+            trace_id=trace_id,
+            tier=verdict.get("tier"),
+            reasons=list(verdict.get("reasons") or []),
+            findings=list(verdict.get("findings") or []),
+            jurisdictions=list(verdict.get("jurisdictions") or []),
+            policy_version=verdict.get("policy_version"),
+            recorded=False,
+            buffered=True,
+            offline=True,
+        )
 
     @classmethod
     def from_response(cls, body: dict[str, Any]) -> GateResult:

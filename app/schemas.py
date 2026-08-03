@@ -228,6 +228,50 @@ class PackSubscriptionIn(BaseModel):
     enforcement: Literal["advisory"] = "advisory"  # blocking reserved for post-review
 
 
+class DeviceRegisterIn(BaseModel):
+    device_id: str = Field(min_length=8, max_length=128)
+    public_pem: str = Field(min_length=1)
+    label: str | None = None
+
+
+class DeviceRegisterOut(BaseModel):
+    device_id: str
+    registered: bool
+
+
+class OfflineBundleOut(BaseModel):
+    """Rules the SDK evaluates against while Attest is unreachable."""
+
+    policy_version: str | None = None
+    policy_rules: dict[str, Any] = Field(default_factory=dict)
+    packs: list[dict[str, Any]] = Field(default_factory=list)
+    fail_mode: str = "deny_on_error"
+
+
+class ReplayItemIn(BaseModel):
+    """One event buffered during an outage, signed by the SDK's device key."""
+
+    action: str = Field(min_length=1)
+    output: dict[str, Any]
+    occurred_at: str
+    local_seq: int
+    prev_local: str | None = None
+    payload_hash: str
+    client_signature: str
+    trace_id: str | None = None
+    local_status: str | None = None
+
+
+class ReplayIn(BaseModel):
+    device_id: str = Field(min_length=8)
+    items: list[ReplayItemIn] = Field(min_length=1, max_length=500)
+
+
+class ReplayOut(BaseModel):
+    accepted: int
+    results: list[dict[str, Any]] = Field(default_factory=list)
+
+
 GateStatus = Literal["compliant", "flagged", "blocked", "unevaluated"]
 
 

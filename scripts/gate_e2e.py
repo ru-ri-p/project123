@@ -81,12 +81,18 @@ def main() -> None:
                     headers={"x-api-key": api_key}).json()
     ok(replay["all_verified"], "the multi-step chain verifies")
 
-    # An outage must not take down the caller's application.
-    offline = AttestClient(api_key=api_key, base_url="http://127.0.0.1:9", server_timeout=2)
+    # An outage must not take down the caller's application, and must not lose
+    # the record either. (Exercised in depth by scripts/outage_e2e.py.)
+    import tempfile
+
+    offline = AttestClient(
+        api_key=api_key, base_url="http://127.0.0.1:9", server_timeout=2,
+        state_dir=tempfile.mkdtemp(prefix="attest-gate-e2e-"),
+    )
     degraded = offline.gate({"text": "x"})
-    ok(degraded.status == "error" and degraded.recorded is False,
-       "unreachable Attest returns a degraded result instead of raising")
-    ok(degraded.allowed is True, "the caller's application keeps serving")
+    ok(degraded.allowed is True, "the caller's application keeps serving during an outage")
+    ok(degraded.buffered and not degraded.recorded,
+       "the output is buffered locally rather than lost")
 
     # --- It all shows up on their dashboard --------------------------------
     with sync_playwright() as pw:

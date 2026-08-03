@@ -3,14 +3,19 @@
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 import requests
 
 from .buffer import AsyncFlushBuffer, FlushItem
+from .device import DEFAULT_STATE_DIR, DeviceKey
 from .gate import GateResult
+from .offline import OfflineBundle
 from .policy.bundle import PolicyBundle
 from .policy.evaluator import needs_server_escalation
+from .store import OfflineStore
 
 DEFAULT_SERVER_TIMEOUT = 5.0
 ESCALATION_SERVER_TIMEOUT = 30.0
@@ -26,6 +31,8 @@ class AttestClient:
         enable_local_precheck: bool = True,
         enable_buffer: bool = False,
         server_timeout: float = DEFAULT_SERVER_TIMEOUT,
+        offline_enabled: bool = True,
+        state_dir: str | Path | None = None,
     ) -> None:
         self.api_key = api_key
         self.base_url = base_url.rstrip("/")
@@ -38,6 +45,15 @@ class AttestClient:
         self._buffer: AsyncFlushBuffer | None = None
         if enable_buffer:
             self._buffer = AsyncFlushBuffer(flush_fn=self._flush_item)
+        # Offline resilience is ON by default: an outage must not create a hole
+        # in the audit trail, and the safe behaviour should not be opt-in.
+        self.offline_enabled = offline_enabled
+        self.state_dir = Path(state_dir) if state_dir else DEFAULT_STATE_DIR
+        self._device_key: DeviceKey | None = None
+        self._store: OfflineStore | None = None
+        self._bundle_cache: OfflineBundle | None = None
+        self._device_registered = False
+        self._prepared = False
 
     def gate(
         self,
@@ -71,6 +87,10 @@ class AttestClient:
                 returns a result with recorded=False so your application keeps
                 serving; "raise" propagates the exception.
         """
+        if self.offline_enabled and not self._prepared:
+            self._prepared = True
+            self.prepare_offline()
+
         body: dict[str, Any] = {"action": action, "output": output}
         if trace:
             body["trace_id"] = trace
@@ -87,9 +107,172 @@ class AttestClient:
         except requests.RequestException as exc:
             if on_error == "raise":
                 raise
+            if self.offline_enabled:
+                # Attest is down; keep serving AND keep the trail.
+                return self._gate_offline(action, output, trace)
             return GateResult.unreachable(exc, trace_id=trace or "")
         data: dict[str, Any] = response.json()
+        # Back up: hand over anything buffered during the outage we just left.
+        self._drain_offline()
         return GateResult.from_response(data)
+
+    # --- offline resilience ------------------------------------------------
+
+    def _gate_offline(
+        self, action: str, output: dict[str, Any], trace: str | None
+    ) -> GateResult:
+        """Evaluate locally, sign the claim, and queue it durably."""
+        from .canonical import sha256_hex
+        from .offline_envelope import build_offline_claim, offline_claim_hash
+
+        bundle = self._offline_bundle()
+        verdict = bundle.evaluate(action, output)
+
+        store = self._offline_store()
+        device = self._device()
+        local_seq, prev_local = store.chain_state()
+        occurred_at = datetime.now(UTC).isoformat()
+        claim = build_offline_claim(
+            device_id=device.device_id,
+            local_seq=local_seq,
+            prev_local=prev_local,
+            occurred_at=occurred_at,
+            action=action,
+            payload_hash=sha256_hex(output),
+        )
+        claim_hash = offline_claim_hash(claim)
+        store.append(
+            {
+                "action": action,
+                "output": output,
+                "occurred_at": occurred_at,
+                "local_seq": local_seq,
+                "prev_local": prev_local,
+                "payload_hash": claim["payload_hash"],
+                "client_signature": device.sign_hex(claim_hash),
+                "claim_hash": claim_hash,
+                "trace_id": trace,
+                "local_status": verdict["status"],
+            }
+        )
+        store.remember_head(local_seq + 1, claim_hash)
+        return GateResult.from_offline(verdict, trace_id=trace or "")
+
+    def _drain_offline(self, *, batch: int = 100) -> int:
+        """Hand buffered events to Attest. Records are dropped only once accepted."""
+        if not self.offline_enabled:
+            return 0
+        store = self._offline_store()
+        pending = store.read_all()
+        if not pending:
+            return 0
+        device = self._device()
+        self._ensure_device_registered()
+
+        sent = 0
+        while pending:
+            chunk, pending = pending[:batch], pending[batch:]
+            items = [
+                {
+                    "action": r["action"],
+                    "output": r["output"],
+                    "occurred_at": r["occurred_at"],
+                    "local_seq": r["local_seq"],
+                    "prev_local": r["prev_local"],
+                    "payload_hash": r["payload_hash"],
+                    "client_signature": r["client_signature"],
+                    "trace_id": r.get("trace_id"),
+                    "local_status": r.get("local_status"),
+                }
+                for r in chunk
+            ]
+            try:
+                response = requests.post(
+                    f"{self.base_url}/v1/sdk/replay",
+                    headers={"x-api-key": self.api_key},
+                    json={"device_id": device.device_id, "items": items},
+                    timeout=self.server_timeout * 4,
+                )
+                response.raise_for_status()
+            except requests.RequestException:
+                break  # still down, or rejected — leave the queue intact and retry later
+            store.drop(len(chunk))
+            sent += len(chunk)
+        return sent
+
+    def flush_offline(self) -> int:
+        """Force a replay attempt. Returns how many events Attest accepted."""
+        return self._drain_offline()
+
+    @property
+    def pending_offline(self) -> int:
+        """Events waiting to be handed over. Should be 0 in steady state."""
+        if not self.offline_enabled:
+            return 0
+        return self._offline_store().pending()
+
+    def refresh_offline_bundle(self) -> bool:
+        """Cache the rules used if Attest becomes unreachable. Safe to call often."""
+        if not self.offline_enabled:
+            return False
+        try:
+            response = requests.get(
+                f"{self.base_url}/v1/sdk/bundle",
+                headers={"x-api-key": self.api_key},
+                timeout=self.server_timeout,
+            )
+            response.raise_for_status()
+        except requests.RequestException:
+            return False
+        bundle = self._offline_bundle()
+        bundle.data = response.json()
+        bundle.save()
+        return True
+
+    def _device(self) -> DeviceKey:
+        if self._device_key is None:
+            self._device_key = DeviceKey.load_or_create(self.state_dir)
+        return self._device_key
+
+    def _offline_store(self) -> OfflineStore:
+        if self._store is None:
+            self._store = OfflineStore(self.state_dir)
+        return self._store
+
+    def _offline_bundle(self) -> OfflineBundle:
+        if self._bundle_cache is None:
+            self._bundle_cache = OfflineBundle.load(self.state_dir)
+        return self._bundle_cache
+
+    def _ensure_device_registered(self) -> bool:
+        if self._device_registered:
+            return True
+        device = self._device()
+        try:
+            response = requests.post(
+                f"{self.base_url}/v1/sdk/devices",
+                headers={"x-api-key": self.api_key},
+                json={
+                    "device_id": device.device_id,
+                    "public_pem": device.public_pem.decode("utf-8"),
+                },
+                timeout=self.server_timeout,
+            )
+            response.raise_for_status()
+        except requests.RequestException:
+            return False
+        self._device_registered = True
+        return True
+
+    def prepare_offline(self) -> bool:
+        """Register this instance and cache the rules, so an outage is survivable.
+
+        Called automatically on the first gate(); call it at startup to be ready
+        before the first request rather than after it.
+        """
+        registered = self._ensure_device_registered()
+        refreshed = self.refresh_offline_bundle()
+        return registered and refreshed
 
     def new_trace(self) -> str:
         return str(uuid.uuid4())

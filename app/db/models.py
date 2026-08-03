@@ -124,6 +124,15 @@ class Event(Base):
     )
     policy_version: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    # --- offline provenance -------------------------------------------------
+    # Set only for events buffered during an Attest outage and grafted in later.
+    # created_at is when Attest recorded it; occurred_at is when the customer's
+    # system says it happened, and client_signature is the device's signature
+    # over that claim — so the gap is evidenced rather than merely asserted.
+    deferred: Mapped[bool] = mapped_column(nullable=False, server_default="false")
+    occurred_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    client_device_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    client_signature: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     org: Mapped[Org] = relationship(back_populates="events")
     trace: Mapped[Trace] = relationship(back_populates="events")
@@ -288,6 +297,36 @@ class AccessGrantKey(Base):
     )
     payload_hash: Mapped[str] = mapped_column(Text, primary_key=True)
     wrapped_key_b64: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class SdkDevice(Base):
+    """An SDK instance's own signing key, registered automatically on first run.
+
+    Exists for one reason: when Attest is unreachable, the SDK must keep a record
+    that is still tamper-evident. Events buffered during an outage are signed
+    into a local chain by this key and verified server-side when they are grafted
+    in. Without it, the outage window would be "trust the client's buffer" —
+    exactly the assumption the product exists to remove, given the threat model
+    includes compromised insiders on the client side.
+
+    Attest holds only the public half; the private key never leaves the SDK host.
+    """
+
+    __tablename__ = "sdk_devices"
+    __table_args__ = (
+        UniqueConstraint("org_id", "device_id", name="uq_sdk_device_org_device"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    org_id: Mapped[str] = mapped_column(Text, ForeignKey("orgs.id"), nullable=False, index=True)
+    device_id: Mapped[str] = mapped_column(Text, nullable=False)
+    public_pem: Mapped[str] = mapped_column(Text, nullable=False)
+    label: Mapped[str | None] = mapped_column(Text, nullable=True)
+    revoked: Mapped[bool] = mapped_column(nullable=False, server_default="false")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class RegulationPack(Base):
