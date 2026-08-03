@@ -70,8 +70,9 @@ def main() -> None:
 
         # --- Admin dashboard: connect (key state box goes 'loaded') ------------
         admin.goto(BASE + "/admin")
-        admin.fill("#adminkey", ADMIN_KEY)
-        admin.click("#btn-connect")
+        admin.fill("#gate-key", ADMIN_KEY)
+        admin.click("#gate-connect")
+        admin.wait_for_selector("#appui", state="visible", timeout=8000)
         admin.wait_for_selector("#keybox.loaded", timeout=5000)
         ok(True, "admin: connected — key state loaded")
 

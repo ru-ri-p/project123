@@ -155,7 +155,22 @@
     </div>
   </div>
 
-  <div class="main" id="appui">
+  <!-- Shown until an admin key is accepted. Without this gate every action is
+       clickable with an empty or stale key and fails with a bare 401. -->
+  <div class="main" id="gate">
+    <h1>Connect</h1>
+    <div class="sub">This console acts on live customer data. Present an operator key to continue.</div>
+    <div class="card" style="max-width:520px;">
+      <div class="eyebrow" style="margin-bottom:10px;">OPERATOR KEY</div>
+      <input type="password" id="gate-key" placeholder="Admin key" autocomplete="off" class="field">
+      <button class="act btn primary" id="gate-connect" style="margin-top:12px;">Connect</button>
+      <div class="kv2" id="gate-msg" style="margin-top:10px;"></div>
+      <div class="kv2" style="margin-top:14px;">The key is held for this browser tab only and is
+        never stored on disk. It is the ADMIN_API_KEY configured on the service.</div>
+    </div>
+  </div>
+
+  <div class="main" id="appui" style="display:none;">
     <!-- ==================== OVERVIEW ==================== -->
     <section class="screen on" id="scr-overview">
       <h1>Overview</h1>
@@ -364,6 +379,21 @@ const api = {
   },
 };
 
+// If the key stops being accepted mid-session (rotated, or the service
+// redeployed with a different one), return to the gate instead of letting every
+// button fail with a bare 401.
+function handleAuthLoss(e) {
+  if (e && (e.status === 401 || e.status === 503)) {
+    sessionStorage.removeItem("attest_admin_key");
+    setKeyState(e.status === 401 ? "wrong" : "missing");
+    showGate(e.status === 401
+      ? "The admin key is no longer accepted. Present it again."
+      : "The service has no ADMIN_API_KEY configured.");
+    return true;
+  }
+  return false;
+}
+
 /* ---------- nav ---------- */
 const SCREENS = [["overview","Overview"],["requests","Access Requests"],["file","File a Request"],["orgs","Organisations"],["packs","Regulation Packs"],["trace","Trace Lookup"]];
 let current = "overview";
@@ -389,25 +419,48 @@ function setKeyState(state, detail) {
   $("#kdetail").textContent = detail || (state === "loaded" ? "" : "signing actions disabled");
   $("#keyform").style.display = state === "loaded" ? "none" : "block";
 }
-async function connect() {
-  api.key = $("#adminkey").value.trim();
-  if (!api.key) { setKeyState("missing"); return; }
+function showGate(msg) {
+  $("#gate").style.display = "block";
+  $("#appui").style.display = "none";
+  $("#gate-msg").textContent = msg || "";
+  $("#gate-msg").style.color = msg ? "var(--red)" : "var(--mut)";
+}
+function showApp() {
+  $("#gate").style.display = "none";
+  $("#appui").style.display = "block";
+}
+
+async function connect(keyValue) {
+  api.key = (keyValue !== undefined ? keyValue : $("#adminkey").value).trim();
+  if (!api.key) { setKeyState("missing"); showGate("Enter the admin key to continue."); return; }
   try {
     await api.call("/v1/admin/ping");
     sessionStorage.setItem("attest_admin_key", api.key);
     setKeyState("loaded", await fingerprint(api.key));
+    showApp();
     toast("Connected.", "ok");
     loadOverview(); loadOrgs(); loadRequests(); loadPacks();
   } catch (e) {
-    if (e.status === 401) { setKeyState("wrong", "key rejected by service"); }
-    else if (e.status === 503) { setKeyState("missing", "server has no admin key configured"); }
-    else { setKeyState("missing", "connection failed"); }
-    toast("Connect failed: " + e.message, "err");
+    // A stale key from a previous session is the common case — clear it so the
+    // next reload does not silently retry a key the service already rejected.
+    sessionStorage.removeItem("attest_admin_key");
+    if (e.status === 401) {
+      setKeyState("wrong", "key rejected by service");
+      showGate("That key was rejected. Check ADMIN_API_KEY on the service and try again.");
+    } else if (e.status === 503) {
+      setKeyState("missing", "server has no admin key configured");
+      showGate("The service has no ADMIN_API_KEY configured. Set it in the service environment.");
+    } else {
+      setKeyState("missing", "connection failed");
+      showGate("Could not reach the service: " + e.message);
+    }
   }
 }
-$("#btn-connect").addEventListener("click", connect);
+$("#btn-connect").addEventListener("click", () => connect());
+$("#gate-connect").addEventListener("click", () => connect($("#gate-key").value));
+$("#gate-key").addEventListener("keydown", (ev) => { if (ev.key === "Enter") connect($("#gate-key").value); });
 $("#adminkey").value = api.key;
-if (api.key) connect();
+if (api.key) { $("#gate-key").value = api.key; connect(api.key); } else { showGate(); }
 
 /* ---------- overview ---------- */
 function sparkSvg(daily, w, h) {
@@ -713,7 +766,7 @@ $("#btn-seed").addEventListener("click", async () => {
     const packs = await api.call("/v1/admin/regulation-packs/seed", { method: "POST" });
     toast(`Published ${packs.length} packs (all unverified).`, "ok");
     loadPacks();
-  } catch (e) { toast("Seed failed: " + e.message, "err"); }
+  } catch (e) { if (!handleAuthLoss(e)) toast("Seed failed: " + e.message, "err"); }
   b.disabled = false; b.textContent = "Publish starter packs";
 });
 async function loadPacks() {

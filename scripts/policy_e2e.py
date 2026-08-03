@@ -44,10 +44,20 @@ def main() -> None:
         admin.on("pageerror", lambda e: errs.append("admin: " + str(e)))
         customer.on("pageerror", lambda e: errs.append("customer: " + str(e)))
 
-        # --- Admin: publish packs and apply DIFC Reg 10 to the customer --------
+        # --- Admin: the console must be gated before anything is clickable ----
         admin.goto(BASE + "/admin")
-        admin.fill("#adminkey", ADMIN_KEY)
-        admin.click("#btn-connect")
+        admin.wait_for_selector("#gate", state="visible", timeout=5000)
+        ok(not admin.is_visible("#appui"), "admin: dashboard gated until a key is presented")
+        ok(not admin.is_visible("#btn-seed"), "admin: actions unreachable while ungated")
+        admin.fill("#gate-key", "wrong-key")
+        admin.click("#gate-connect")
+        admin.wait_for_selector("#gate-msg >> text=rejected", timeout=8000)
+        ok(admin.is_visible("#gate"), "admin: a rejected key keeps the gate up with a clear message")
+
+        # --- Admin: publish packs and apply DIFC Reg 10 to the customer --------
+        admin.fill("#gate-key", ADMIN_KEY)
+        admin.click("#gate-connect")
+        admin.wait_for_selector("#appui", state="visible", timeout=8000)
         admin.wait_for_selector("#keybox.loaded", timeout=5000)
         admin.click('nav.screens button[data-k="packs"]')
         admin.click("#btn-seed")
