@@ -15,6 +15,14 @@ from app.services.access import TraceAccessDeniedError
 from app.services.events import EventSequenceError
 from app.services.precheck import NoActivePolicyError, run_precheck
 
+# Told to the customer verbatim when they have no policy. A bare "no active
+# policy" is a dead end; this says what to do about it.
+NO_POLICY_HELP = (
+    "No active policy for this organisation. Attest enforces YOUR policy — publish "
+    "one before prechecking actions: open the Compliance screen in your console and "
+    "use 'Create starter policy', or PUT /v1/policies/internal."
+)
+
 router = APIRouter(prefix="/v1", tags=["precheck"])
 
 
@@ -42,7 +50,7 @@ def precheck(
         db.commit()
     except NoActivePolicyError as exc:
         db.rollback()
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        raise HTTPException(status_code=409, detail=NO_POLICY_HELP) from exc
     except TraceAccessDeniedError as exc:
         db.rollback()
         raise HTTPException(status_code=403, detail=str(exc)) from exc

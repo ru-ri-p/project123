@@ -106,6 +106,18 @@ def org_overview(
     )
     signing = active_signing_key(db, org.id)
 
+    from app.repositories import policies as policy_repo
+    from app.services import regulation_packs as pack_service
+
+    active_policy = policy_repo.get_active_policy(db, org.id)
+    adopted = sorted(
+        {
+            pack.jurisdiction
+            for pack, sub in pack_service.org_subscriptions(db, org.id)
+            if sub.enabled
+        }
+    )
+
     return OrgOverviewOut(
         org_id=org.id,
         name=org.name,
@@ -116,6 +128,8 @@ def org_overview(
         last_event_at=last_at.isoformat() if last_at else None,
         pending_requests=pending,
         daily=[DailyCount(day=d, count=counts.get(d, 0)) for d in days],
+        active_policy_version=active_policy.version if active_policy else None,
+        jurisdictions_adopted=adopted,
     )
 
 

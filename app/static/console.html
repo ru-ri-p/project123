@@ -137,6 +137,10 @@
     <section class="screen on" id="scr-overview">
       <h1 id="ov-title">Overview</h1>
       <div class="sub">Your sealed record of AI actions · <span class="mono" id="ov-now"></span></div>
+      <div id="ov-policybanner" style="display:none;" class="banner amber">
+        <b>No active policy.</b> AI actions cannot be prechecked until you publish one.
+        <b style="cursor:pointer;text-decoration:underline;" id="ov-gotocompliance">Set it up under Compliance</b>.
+      </div>
       <div id="ov-setupbanner" style="display:none;" class="banner amber">
         Your content is currently readable by Attest. Generate a keypair and go dark under
         <b style="cursor:pointer;text-decoration:underline;" id="ov-gotokeys">Keys &amp; Custody</b> —
@@ -215,6 +219,27 @@
         <b>How to read this.</b> Attest applies the rules you adopt and proves it did — it does not
         determine whether an action was lawful. Jurisdiction packs are <b>advisory</b>: they raise
         risk and cite their instrument, but only your own policy can block an action.
+      </div>
+
+      <!-- Shown until the institution has published a policy. Without one,
+           precheck cannot run at all, so this is a blocking setup step. -->
+      <div class="card" id="setup-needed" style="display:none;border-color:var(--amberB);margin-bottom:18px;">
+        <div class="eyebrow" style="color:var(--amber);margin-bottom:8px;">SETUP REQUIRED</div>
+        <div style="font-family:Fraunces,serif;font-size:17px;font-weight:600;margin-bottom:6px;">
+          You have no active policy</div>
+        <div class="kv" style="margin-bottom:12px;">Attest enforces <b>your</b> rules — so until you
+          publish a policy, AI actions cannot be prechecked. Start from a small scaffold and edit it
+          below; you can publish a new version at any time, and every decision records which version
+          was live.</div>
+        <button class="btn primary" id="btn-starter-policy" style="margin:0;">Create starter policy</button>
+      </div>
+
+      <div class="card" id="jurisdiction-nudge" style="display:none;border-color:var(--line3);margin-bottom:18px;">
+        <div class="eyebrow" style="margin-bottom:8px;">NO JURISDICTION ADOPTED</div>
+        <div class="kv">You have not adopted a jurisdiction rulebook. If you operate in the DIFC,
+          adopt <b>DIFC Data Protection Regulations — Regulation 10</b> below: it governs personal
+          data processed by autonomous systems and is the closest thing regionally to an
+          AI-governance rulebook. Rulebooks are advisory — they never block your actions.</div>
       </div>
 
       <div class="grid3" style="margin-bottom:26px;">
@@ -372,6 +397,7 @@ $("#nav").innerHTML = SCREENS.map(([k,l]) =>
    ${k==='requests' ? '<span class="badge" id="navbadge" style="display:none;"></span>' : ''}</button>`).join("");
 document.querySelectorAll("nav.screens button").forEach((b) => b.addEventListener("click", () => go(b.dataset.k)));
 $("#ov-gotokeys").addEventListener("click", () => go("keys"));
+$("#ov-gotocompliance").addEventListener("click", () => go("compliance"));
 $("#ov-pendingstrip").addEventListener("click", () => go("requests"));
 
 /* ---------- connect + overview ---------- */
@@ -406,6 +432,7 @@ function renderOverview(ov) {
   $("#kc-word").textContent = dark ? "Keys in your custody" : "Attest-managed";
   $("#kc-dot").style.background = dark ? "var(--blue)" : "var(--amberB)";
   $("#kc-fp").textContent = ov.wrapping_key_fingerprint ? "SHA256:" + ov.wrapping_key_fingerprint.slice(0,8) + "…" + ov.wrapping_key_fingerprint.slice(-4) : "no wrapping key registered";
+  $("#ov-policybanner").style.display = ov.active_policy_version ? "none" : "block";
   $("#rc-total").textContent = ov.total_events.toLocaleString() + " sealed events";
   $("#rc-last").textContent = fmtT(ov.last_event_at);
   if (ov.pending_requests > 0) {
@@ -660,6 +687,32 @@ $("#btn-mypacks").addEventListener("click", loadMyPacks);
 $("#btn-decisions").addEventListener("click", loadDecisions);
 $("#flagged-only").addEventListener("change", loadDecisions);
 
+// A small, deliberately minimal starting point. It is the institution's policy,
+// so it ships nearly empty: two obvious rules to edit, not a pretence that Attest
+// knows their business.
+const STARTER_POLICY = {
+  schema_version: 2,
+  engine: "json",
+  rules: [
+    {
+      id: "high_risk_financial_action",
+      priority: 1000,
+      tier: "red",
+      decision: "deny",
+      match: { action: ["wire_transfer", "execute_trade"] },
+      reason: "High-risk financial action requires human approval.",
+    },
+    {
+      id: "personal_data_in_output",
+      priority: 800,
+      tier: "orange",
+      decision: "flag",
+      match: { has_pii: true },
+      reason: "Personal data detected — review before release.",
+    },
+  ],
+};
+
 async function loadSummary() {
   try {
     const s = await api.call("/v1/policies/compliance-summary");
@@ -673,8 +726,28 @@ async function loadSummary() {
     $("#cs-unverified").textContent = s.unverified_packs > 0
       ? `${s.unverified_packs} rulebook${s.unverified_packs > 1 ? "s" : ""} pending legal review`
       : "";
+    // Guided setup: without a policy nothing can be prechecked at all, so say so
+    // plainly rather than letting them discover it as a 409 from the API.
+    $("#setup-needed").style.display = s.active_policy_version ? "none" : "block";
+    $("#jurisdiction-nudge").style.display =
+      Object.keys(s.by_jurisdiction).length === 0 && s.unverified_packs === 0 ? "block" : "none";
   } catch (e) { /* compliance is optional until packs exist */ }
 }
+
+$("#btn-starter-policy").addEventListener("click", async () => {
+  const btn = $("#btn-starter-policy"); btn.disabled = true; btn.textContent = "Publishing…";
+  try {
+    await api.call("/v1/policies/internal", { method: "PUT", body: {
+      name: "Internal AI policy", version: "v1", rules: STARTER_POLICY, activate: true } });
+    $("#pol-name").value = "Internal AI policy";
+    $("#pol-version").value = "v1";
+    $("#pol-rules").value = JSON.stringify(STARTER_POLICY, null, 2);
+    toast("Starter policy published and active — edit it below to match your rules.", "ok");
+    loadSummary();
+    document.querySelector("#pol-rules").scrollIntoView({ behavior: "smooth", block: "center" });
+  } catch (e) { toast("Could not publish: " + e.message, "err"); }
+  btn.disabled = false; btn.textContent = "Create starter policy";
+});
 
 async function loadMyPacks() {
   try {
