@@ -18,13 +18,16 @@ from app.auth import hash_api_key
 from app.db.models import AccessGrantKey, AccessRequest, Event, Org, Trace
 from app.db.session import get_db
 from app.schemas import (
+    AdminOrgActivity,
     AdminOrgCreateIn,
     AdminOrgKeyOut,
     AdminOrgOut,
     AdminRequestDetailOut,
     AdminRequestOut,
     AdminScopeItem,
+    AdminStatsOut,
     AdminTraceEventOut,
+    DailyCount,
     EventReplayItem,
     TraceReplayOut,
 )
@@ -48,6 +51,77 @@ def _parse_uuid(value: str) -> uuid.UUID:
 def ping() -> dict[str, bool]:
     """Auth probe for the dashboard connect button."""
     return {"ok": True}
+
+
+@router.get("/stats", response_model=AdminStatsOut)
+def stats(db: Session = Depends(get_db)) -> AdminStatsOut:
+    """Live system health for the ops Overview — real queries, no vanity numbers."""
+    from datetime import UTC, datetime, timedelta
+
+    from sqlalchemy import func
+
+    from app.crypto.signing_provider import SigningKeyError, get_signing_provider
+    from app.db.models import Anchor, Batch
+
+    try:
+        backend = str(get_signing_provider().metadata().get("backend", "unknown"))
+    except SigningKeyError:
+        backend = "unavailable"
+
+    anchored = db.query(func.count(Anchor.id)).scalar() or 0
+    total_batches = db.query(func.count(Batch.id)).scalar() or 0
+    last_anchor = db.query(func.max(Anchor.anchored_at)).scalar()
+    unbatched = (
+        db.query(func.count(Event.id)).filter(Event.batch_id.is_(None)).scalar() or 0
+    )
+
+    now = datetime.now(UTC)
+    since_24h = now - timedelta(hours=24)
+    events_24h = (
+        db.query(func.count(Event.id)).filter(Event.created_at >= since_24h).scalar() or 0
+    )
+    pending_requests = (
+        db.query(func.count(AccessRequest.id))
+        .filter(AccessRequest.status == "pending")
+        .scalar()
+        or 0
+    )
+
+    window_start = (now - timedelta(days=11)).replace(hour=0, minute=0, second=0, microsecond=0)
+    day_col = func.date_trunc("day", Event.created_at)
+    rows = (
+        db.query(Event.org_id, day_col.label("day"), func.count(Event.id))
+        .filter(Event.created_at >= window_start)
+        .group_by(Event.org_id, day_col)
+        .all()
+    )
+    by_org: dict[str, dict[str, int]] = {}
+    for org_id, day, count in rows:
+        by_org.setdefault(org_id, {})[day.strftime("%Y-%m-%d")] = count
+    days = [(window_start + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(12)]
+
+    orgs = db.query(Org).order_by(Org.created_at.desc()).all()
+    activity = [
+        AdminOrgActivity(
+            id=o.id,
+            name=o.name,
+            confidentiality_mode=o.confidentiality_mode,
+            events_today=by_org.get(o.id, {}).get(days[-1], 0),
+            daily=[DailyCount(day=d, count=by_org.get(o.id, {}).get(d, 0)) for d in days],
+        )
+        for o in orgs
+    ]
+
+    return AdminStatsOut(
+        signing_backend=backend,
+        anchored_batches=anchored,
+        pending_batches=max(0, total_batches - anchored),
+        last_anchor_at=last_anchor.isoformat() if last_anchor else None,
+        unbatched_events=unbatched,
+        events_24h=events_24h,
+        pending_requests=pending_requests,
+        orgs=activity,
+    )
 
 
 # --- Orgs ---------------------------------------------------------------------

@@ -1,10 +1,10 @@
-"""End-to-end: the admin dashboard and customer console drive the full ceremony
-against each other in two real Chromium pages.
+"""End-to-end: the ops dashboard and customer console drive the full ceremony
+against each other in two real Chromium pages (new light "ledger" design).
 
-Admin UI: connect -> look up the customer trace -> tick one record -> file.
-Customer UI: connect -> keygen (WebCrypto) -> go dark -> approve with local key.
-Admin UI: read the approved record (content shown), read out-of-scope (403),
-open the consent trail (access_request/approval/read, all verified).
+Admin UI: connect -> File a Request (org card, trace fetch, tick record, reason)
+-> read shows the 403 boundary. Customer UI: connect -> keygen -> go dark ->
+approve with local key. Admin UI: read approved record, open + verify the
+consent trail.
 
 Run with the API on 127.0.0.1:8300 and ADMIN_API_KEY=e2e-admin-key.
 """
@@ -49,12 +49,13 @@ def main() -> None:
         customer.goto(BASE + "/console")
         customer.fill("#apikey", api_key)
         customer.click("#btn-connect")
-        customer.wait_for_selector("#connstatus.ok", timeout=5000)
+        customer.wait_for_selector("#orgbadge", state="visible", timeout=5000)
+        customer.click('nav.screens button[data-k="keys"]')
         customer.click("#btn-keygen")
         customer.wait_for_selector("#keygenout", state="visible", timeout=30000)
         priv_pem = customer.evaluate("keypairPems.priv")
         customer.click("#btn-enable")
-        customer.wait_for_selector("#enablestatus.ok", timeout=5000)
+        customer.wait_for_selector("#enablestatus", state="visible", timeout=5000)
         ok(True, "customer: connected, keygen, customer-key enabled")
 
         # --- Customer records two dark events (the SDK path) -------------------
@@ -66,67 +67,71 @@ def main() -> None:
             assert r.status_code == 200, r.text
         ok(True, "customer: two dark events recorded")
 
-        # --- Admin dashboard: connect, look up the trace, file for record 1 ----
+        # --- Admin dashboard: connect (key state box goes 'loaded') ------------
         admin.goto(BASE + "/admin")
         admin.fill("#adminkey", ADMIN_KEY)
         admin.click("#btn-connect")
-        admin.wait_for_selector("#appui", state="visible", timeout=5000)
-        ok(True, "admin: connected")
+        admin.wait_for_selector("#keybox.loaded", timeout=5000)
+        ok(True, "admin: connected — key state loaded")
 
-        admin.select_option("#file-org", org_id)
+        # --- Admin: File a Request flow ---------------------------------------
+        admin.click('nav.screens button[data-k="file"]')
+        admin.wait_for_selector(f'button[data-org="{org_id}"]', timeout=5000)
+        admin.click(f'button[data-org="{org_id}"]')
         admin.fill("#file-trace", trace)
-        admin.click("#btn-load-records")
-        admin.wait_for_selector("#file-records input[type=checkbox]", timeout=5000)
-        boxes = admin.query_selector_all("#file-records input[type=checkbox]")
-        ok(len(boxes) == 2, "admin: trace lookup lists both records")
-        boxes[0].check()
-        admin.fill("#file-reason", "e2e dashboard dispute")
+        admin.click("#btn-fetch")
+        admin.wait_for_selector("[data-rec]", timeout=5000)
+        boxes = admin.query_selector_all("#file-records [data-rec]")
+        ok(len(boxes) == 2, "admin: trace fetch lists both records")
+        boxes[0].click()
+        admin.fill("#file-reason", "e2e dashboard dispute — DFSA sampling")
+        admin.wait_for_selector("#btn-file:not([disabled])", timeout=3000)
         admin.click("#btn-file")
-        admin.wait_for_selector("#toast.ok >> text=filed", timeout=10000)
-        admin.wait_for_selector(".req", timeout=5000)
-        # The dashboard refreshes its list right after filing; let the re-render
-        # settle so we open the final DOM node, not one about to be replaced.
-        admin.wait_for_timeout(700)
+        admin.wait_for_selector("#file-done", state="visible", timeout=10000)
         ok(True, "admin: request filed from the dashboard")
+        admin.click("#btn-file-view")
 
         # --- Admin: read before approval -> boundary message -------------------
-        admin.click(".req summary")
-        admin.wait_for_selector(".req button[data-read]", timeout=5000)
-        admin.click(".req button[data-read]")
-        admin.wait_for_selector(".req .readout >> text=403", timeout=10000)
+        admin.wait_for_selector("[data-open]", timeout=5000)
+        admin.click("[data-open]")
+        admin.wait_for_selector("[data-read]", timeout=5000)
+        admin.click("[data-read]")
+        admin.wait_for_selector(".readout >> text=403", timeout=10000)
         ok(True, "admin: read before approval shows the 403 boundary")
 
         # --- Customer approves in the console ---------------------------------
-        customer.click('nav.tabs button[data-tab="requests"]')
+        customer.click('nav.screens button[data-k="requests"]')
         customer.click("#btn-refresh")
-        customer.wait_for_selector(".req", timeout=5000)
-        customer.click(".req summary")
-        customer.wait_for_selector(".req .approver", timeout=5000)
-        customer.fill(".req .approver", "officer_e2e")
-        customer.fill(".req .keypaste", priv_pem)
+        customer.wait_for_selector("[data-open]", timeout=5000)
+        customer.click("[data-open]")
+        customer.wait_for_selector(".approver", timeout=5000)
+        customer.click('[data-rec="0"]')
+        customer.fill(".approver", "officer_e2e")
+        customer.fill(".keypaste", priv_pem)
         customer.evaluate(
             "const t=document.querySelector('#toast');"
             "t.className=''; t.style.display='none'")
-        customer.click(".req .approve")
+        customer.click(".approve")
         customer.wait_for_selector("#toast.ok >> text=Approved", timeout=15000)
         ok(True, "customer: approved with locally-held private key")
 
-        # --- Admin: read approved record and the out-of-scope one --------------
+        # --- Admin: read approved record ---------------------------------------
+        admin.click("#btn-back")
         admin.click("#btn-reqs")
-        admin.wait_for_selector(".req", timeout=5000)
-        admin.wait_for_timeout(700)
-        admin.click(".req summary")
-        admin.wait_for_selector(".req button[data-read]", timeout=5000)
-        admin.click(".req button[data-read]")
-        admin.wait_for_selector(".req .readout pre.content >> text=synthetic-1", timeout=10000)
+        admin.wait_for_selector("[data-open]", timeout=5000)
+        admin.click("[data-open]")
+        admin.wait_for_selector("[data-read]", timeout=5000)
+        admin.click("[data-read]")
+        admin.wait_for_selector(".readout >> text=synthetic-1", timeout=10000)
         ok(True, "admin: approved record readable in the dashboard")
 
-        # --- Admin: consent trail shows and verifies ---------------------------
-        admin.click(".req button[data-trail]")
-        admin.wait_for_selector(".trailout >> text=trail verified", timeout=10000)
-        trail_text = admin.inner_text(".trailout")
-        for expected in ("access_request", "access_approval", "access_read"):
+        # --- Admin: consent trail renders and verifies -------------------------
+        admin.wait_for_selector("#trailbox >> text=ACCESS_REQUEST", timeout=10000)
+        trail_text = admin.inner_text("#trailbox")
+        for expected in ("ACCESS_REQUEST", "ACCESS_APPROVAL", "ACCESS_READ"):
             ok(expected in trail_text, f"trail shows {expected}")
+        admin.click("#btn-verify-detail")
+        admin.wait_for_selector("#trail-verdict >> text=TRAIL VERIFIED", timeout=15000)
         ok(True, "admin: consent trail verified in the dashboard")
 
         ok(not errs, f"no browser JS errors (got: {errs})")

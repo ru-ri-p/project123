@@ -122,6 +122,8 @@ def test_request_oversight_and_trace_tools(client) -> None:
 def test_admin_dashboard_served_and_self_contained(client) -> None:
     res = client.get("/admin")
     assert res.status_code == 200
-    assert "Attest Ops Dashboard" in res.text
+    assert "Ops Control Room" in res.text
     for marker in ("<script src=", "https://cdn", "googleapis.com"):
         assert marker not in res.text
+    # The regulatory type system is embedded, not fetched.
+    assert "Fraunces" in res.text and "data:font/woff2;base64," in res.text

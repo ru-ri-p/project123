@@ -23,8 +23,11 @@ from app.schemas import (
     AccessResolveIn,
     AccessScopeItem,
     ConfidentialityIn,
+    DailyCount,
     GrantRecordOut,
+    OrgOverviewOut,
     SigningKeyOut,
+    TraceEventMetaOut,
 )
 from app.services import access_review
 from app.services import org_signing as org_signing_service
@@ -43,6 +46,8 @@ def _out(db: Session, req: AccessRequest) -> AccessRequestOut:
         approvals=access_review.approvals_count(db, req.id),
         grantee_public_pem=req.grantee_public_pem,
         expires_at=req.expires_at.isoformat(),
+        requested_by=req.requested_by,
+        trace_id=str(req.trace_id) if req.trace_id else None,
     )
 
 
@@ -51,6 +56,91 @@ def _parse_uuid(value: str) -> uuid.UUID:
         return uuid.UUID(value)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail="invalid id") from exc
+
+
+# --- Org: overview (dashboard home) -------------------------------------------
+
+
+@router.get("/org/overview", response_model=OrgOverviewOut)
+def org_overview(
+    org: Org = Depends(get_authenticated_org),
+    db: Session = Depends(get_db),
+) -> OrgOverviewOut:
+    """Everything the customer console's Overview screen shows, in one call."""
+    import hashlib
+    from datetime import UTC, datetime, timedelta
+
+    from sqlalchemy import func
+
+    from app.db.models import Event
+    from app.services.org_signing import active_signing_key
+
+    now = datetime.now(UTC)
+    window_start = (now - timedelta(days=13)).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+    day_col = func.date_trunc("day", Event.created_at)
+    rows = (
+        db.query(day_col.label("day"), func.count(Event.id))
+        .filter(Event.org_id == org.id, Event.created_at >= window_start)
+        .group_by(day_col)
+        .all()
+    )
+    counts = {day.strftime("%Y-%m-%d"): c for day, c in rows}
+    days = [(window_start + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(14)]
+
+    total = db.query(func.count(Event.id)).filter(Event.org_id == org.id).scalar() or 0
+    last_at = (
+        db.query(func.max(Event.created_at)).filter(Event.org_id == org.id).scalar()
+    )
+    pending = (
+        db.query(func.count(AccessRequest.id))
+        .filter(AccessRequest.org_id == org.id, AccessRequest.status == "pending")
+        .scalar()
+        or 0
+    )
+    fingerprint = (
+        hashlib.sha256(org.wrapping_public_pem.encode("utf-8")).hexdigest()
+        if org.wrapping_public_pem
+        else None
+    )
+    signing = active_signing_key(db, org.id)
+
+    return OrgOverviewOut(
+        org_id=org.id,
+        name=org.name,
+        confidentiality_mode=org.confidentiality_mode,
+        wrapping_key_fingerprint=fingerprint,
+        signing_key_id=str(signing.key_id) if signing else None,
+        total_events=total,
+        last_event_at=last_at.isoformat() if last_at else None,
+        pending_requests=pending,
+        daily=[DailyCount(day=d, count=counts.get(d, 0)) for d in days],
+    )
+
+
+@router.get("/trace/{trace_id}/events", response_model=list[TraceEventMetaOut])
+def org_trace_events(
+    trace_id: str,
+    org: Org = Depends(get_authenticated_org),
+    db: Session = Depends(get_db),
+) -> list[TraceEventMetaOut]:
+    """Event metadata for one of the org's own traces (hashes/types, not content)."""
+    from app.repositories import events as event_repo
+
+    events = event_repo.events_for_trace(db, org.id, _parse_uuid(trace_id))
+    if not events:
+        raise HTTPException(status_code=404, detail="trace not found")
+    return [
+        TraceEventMetaOut(
+            seq=e.seq,
+            type=e.type,
+            payload_hash=e.payload_hash,
+            hash=e.hash,
+            created_at=e.created_at.isoformat(),
+        )
+        for e in events
+    ]
 
 
 # --- Org: confidentiality + signing key ---------------------------------------

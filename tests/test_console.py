@@ -18,7 +18,9 @@ def test_console_served() -> None:
     res = client.get("/console")
     assert res.status_code == 200
     assert res.headers["content-type"].startswith("text/html")
-    assert "Attest Customer Console" in res.text
+    assert "Customer Console" in res.text
+    # /dashboard serves the same page.
+    assert "Customer Console" in client.get("/dashboard").text
 
 
 def test_console_is_self_contained() -> None:

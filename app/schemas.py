@@ -217,6 +217,8 @@ class AccessRequestOut(BaseModel):
     approvals: int = 0
     grantee_public_pem: str
     expires_at: str
+    requested_by: str | None = None
+    trace_id: str | None = None  # the request's consent-trail trace
 
 
 class AccessScopeItem(BaseModel):
@@ -287,6 +289,50 @@ class AdminTraceEventOut(BaseModel):
     payload_hash: str
     hash: str
     prev_hash: str | None
+    created_at: str
+
+
+class DailyCount(BaseModel):
+    day: str  # YYYY-MM-DD
+    count: int
+
+
+class AdminOrgActivity(BaseModel):
+    id: str
+    name: str
+    confidentiality_mode: str
+    events_today: int
+    daily: list[DailyCount]
+
+
+class AdminStatsOut(BaseModel):
+    signing_backend: str
+    anchored_batches: int
+    pending_batches: int
+    last_anchor_at: str | None
+    unbatched_events: int
+    events_24h: int
+    pending_requests: int
+    orgs: list[AdminOrgActivity]
+
+
+class OrgOverviewOut(BaseModel):
+    org_id: str
+    name: str
+    confidentiality_mode: str
+    wrapping_key_fingerprint: str | None
+    signing_key_id: str | None
+    total_events: int
+    last_event_at: str | None
+    pending_requests: int
+    daily: list[DailyCount]
+
+
+class TraceEventMetaOut(BaseModel):
+    seq: int
+    type: str
+    payload_hash: str
+    hash: str
     created_at: str
 
 
