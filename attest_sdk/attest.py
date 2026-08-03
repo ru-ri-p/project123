@@ -8,6 +8,7 @@ from typing import Any
 import requests
 
 from .buffer import AsyncFlushBuffer, FlushItem
+from .gate import GateResult
 from .policy.bundle import PolicyBundle
 from .policy.evaluator import needs_server_escalation
 
@@ -37,6 +38,58 @@ class AttestClient:
         self._buffer: AsyncFlushBuffer | None = None
         if enable_buffer:
             self._buffer = AsyncFlushBuffer(flush_fn=self._flush_item)
+
+    def gate(
+        self,
+        output: dict[str, Any],
+        action: str = "model_completion",
+        *,
+        trace: str | None = None,
+        policy_version: str | None = None,
+        on_error: str = "flag",
+    ) -> GateResult:
+        """Check and log one AI output. This is the whole integration.
+
+        Replaces new_trace + precheck + record_event + sequence bookkeeping with
+        a single call. Attest evaluates the output against your policy and any
+        jurisdiction rulebooks you have adopted, records both the decision and
+        the output as signed, chained events, and returns a verdict.
+
+            result = attest.gate({"output": answer})
+            if result.blocked:
+                answer = "This response needs review before release."
+
+        Attest never changes your behaviour — read the verdict and decide.
+
+        Args:
+            output: the AI output (and any context) to evaluate and record.
+            action: what happened, in your own vocabulary.
+            trace: omit for a standalone record; pass one to group several steps
+                into a single chained story. Sequence numbers are assigned
+                server-side, so you never manage them.
+            on_error: what to do if Attest is unreachable. "flag" (default)
+                returns a result with recorded=False so your application keeps
+                serving; "raise" propagates the exception.
+        """
+        body: dict[str, Any] = {"action": action, "output": output}
+        if trace:
+            body["trace_id"] = trace
+        if policy_version:
+            body["policy_version"] = policy_version
+        try:
+            response = requests.post(
+                f"{self.base_url}/v1/gate",
+                headers={"x-api-key": self.api_key},
+                json=body,
+                timeout=self.server_timeout,
+            )
+            response.raise_for_status()
+        except requests.RequestException as exc:
+            if on_error == "raise":
+                raise
+            return GateResult.unreachable(exc, trace_id=trace or "")
+        data: dict[str, Any] = response.json()
+        return GateResult.from_response(data)
 
     def new_trace(self) -> str:
         return str(uuid.uuid4())

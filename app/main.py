@@ -9,6 +9,7 @@ from app.api.admin import router as admin_router
 from app.api.approvals import router as approvals_router
 from app.api.erasure import router as erasure_router
 from app.api.events import router as events_router
+from app.api.gate import router as gate_router
 from app.api.mitigations import router as mitigations_router
 from app.api.orgs import router as orgs_router
 from app.api.policies import router as policies_router
@@ -33,6 +34,7 @@ app.add_middleware(
     window_seconds=settings.rate_limit_window_seconds,
 )
 app.include_router(events_router)
+app.include_router(gate_router)
 app.include_router(traces_router)
 app.include_router(orgs_router)
 app.include_router(erasure_router)

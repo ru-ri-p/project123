@@ -373,6 +373,14 @@ class PolicyDecisionSummary(Base):
     #   verification_status, advisory_only}] — rule identifiers only.
     findings: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False)
     jurisdictions: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    # Verdict as the caller was told it (compliant | flagged | blocked |
+    # unevaluated). Stored rather than recomputed so the dashboards cannot drift
+    # from what the customer's code actually received. NULL for decisions made
+    # through the older precheck path, which had no gate verdict.
+    status: Mapped[str | None] = mapped_column(String(16), nullable=True, index=True)
+    # The gated output this decision judged, when it came through the gate.
+    output_seq: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    output_hash: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

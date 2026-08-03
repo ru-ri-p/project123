@@ -244,7 +244,7 @@
 
       <div class="grid3" style="margin-bottom:26px;">
         <div class="card">
-          <div class="eyebrow" style="margin-bottom:10px;">DECISIONS CHECKED</div>
+          <div class="eyebrow" style="margin-bottom:10px;">OUTPUTS CHECKED</div>
           <div class="statline"><b id="cs-total" style="color:var(--ink);font-size:18px;">—</b></div>
           <div class="kv2">against policy <span class="mono" id="cs-policy">—</span></div>
         </div>
@@ -252,7 +252,7 @@
           <div class="eyebrow" style="margin-bottom:10px;">FLAGGED FOR REVIEW</div>
           <div class="statline"><span class="sdot" id="cs-flagdot"></span>
             <b id="cs-flagged">—</b></div>
-          <div class="kv2">orange or red tier</div>
+          <div class="kv2" id="cs-cleanline">the rest passed with no problem</div>
         </div>
         <div class="card">
           <div class="eyebrow" style="margin-bottom:10px;">JURISDICTIONS APPLIED</div>
@@ -682,6 +682,23 @@ const VERIF = {
 const JURIS_LABEL = { difc: "DIFC", adgm: "ADGM", uae_onshore: "UAE ONSHORE", internal: "INTERNAL" };
 const TIERCHIP = { green: "blue", yellow: "amber", orange: "amber", red: "red" };
 
+// The verdict the gate handed the customer's code, shown verbatim. Older
+// decisions made through the precheck path carry no status — derive a label for
+// those rather than showing a blank.
+const STATUSCHIP = {
+  compliant:   ["blue",  "✓ COMPLIANT"],
+  flagged:     ["amber", "⚠ FLAGGED"],
+  blocked:     ["red",   "✕ BLOCKED"],
+  unevaluated: ["grey",  "NOT EVALUATED"],
+};
+function statusChip(d) {
+  let status = d.status;
+  if (!status) status = !d.allowed ? "blocked"
+    : (d.tier === "orange" || d.tier === "red" || (d.findings || []).length) ? "flagged" : "compliant";
+  const [cls, label] = STATUSCHIP[status] || ["grey", status.toUpperCase()];
+  return `<span class="chip ${cls}" style="min-width:104px;text-align:center;">${label}</span>`;
+}
+
 function loadCompliance() { loadSummary(); loadMyPacks(); loadDecisions(); }
 $("#btn-mypacks").addEventListener("click", loadMyPacks);
 $("#btn-decisions").addEventListener("click", loadDecisions);
@@ -721,6 +738,10 @@ async function loadSummary() {
     $("#cs-flagged").textContent = s.flagged_total.toLocaleString();
     $("#cs-flagdot").style.background = s.flagged_total > 0 ? "var(--amberB)" : "var(--blue)";
     $("#cs-flagged").style.color = s.flagged_total > 0 ? "var(--amber)" : "var(--blue)";
+    const clean = Math.max(0, s.decisions_total - s.flagged_total);
+    $("#cs-cleanline").textContent = s.decisions_total
+      ? `${clean.toLocaleString()} passed with no problem`
+      : "nothing checked yet";
     const js = Object.keys(s.by_jurisdiction);
     $("#cs-juris").textContent = js.length ? js.map((j) => JURIS_LABEL[j] || j).join(", ") : "none";
     $("#cs-unverified").textContent = s.unverified_packs > 0
@@ -792,9 +813,10 @@ async function loadDecisions() {
     const rows = await api.call("/v1/policies/decisions" + (flagged ? "?flagged_only=true" : ""));
     $("#decisions").innerHTML = rows.length ? rows.map((d) => `
       <div class="rowline" style="align-items:flex-start;">
-        <span class="chip ${TIERCHIP[d.tier] || "grey"}">${esc(d.tier.toUpperCase())}</span>
+        ${statusChip(d)}
         <div style="flex:1;min-width:0;">
           <div style="font-weight:600;font-size:13.5px;">${esc(d.action)}
+            <span class="chip ${TIERCHIP[d.tier] || "grey"}" style="margin-left:6px;font-size:9.5px;">TIER ${esc((d.tier||"").toUpperCase())}</span>
             ${d.allowed ? "" : '<span class="chip red" style="margin-left:6px;">BLOCKED BY YOUR POLICY</span>'}</div>
           <div class="kv2 mono" style="font-size:11px;">${esc(d.trace_id)} · seq ${d.seq} · ${fmtT(d.created_at)}</div>
           ${d.findings.length ? d.findings.map((f) => `

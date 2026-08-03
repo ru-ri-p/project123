@@ -16,7 +16,59 @@ pip install attest_sdk-0.1.0-py3-none-any.whl
 pip install "git+https://github.com/shaundytradesfx/govproject01.git@claude/zealous-archimedes-8i4x3i"
 ```
 
-## Use it (provenance: 2 calls)
+## Use it (the gate: one call)
+
+Route each AI output through `gate()`. Attest evaluates it against your policy
+and any jurisdiction rulebooks you have adopted, records both the decision and
+the output as signed, chained events, and returns a verdict.
+
+```python
+from attest_sdk import AttestClient
+
+attest = AttestClient(api_key="YOUR_API_KEY", base_url="YOUR_SERVICE_URL")
+
+result = attest.gate({"output": answer})
+
+if result.blocked:            # YOUR policy denied it
+    answer = "This response needs review before release."
+elif result.flagged:          # raised risk, or a cited jurisdiction finding
+    log.warning(result.summary())
+```
+
+That is the whole integration. No trace ids, no sequence numbers, no separate
+check-then-log — one call per output.
+
+**Attest reports; your code decides.** The gate never alters what your
+application does. Verdicts:
+
+| `result.status` | Meaning |
+|---|---|
+| `compliant` | Evaluated, nothing raised. Logged as clean on your dashboard. |
+| `flagged` | Allowed, but raised risk or drew a cited jurisdiction finding. |
+| `blocked` | **Your own** policy denied it. Jurisdiction rulebooks never block. |
+| `unevaluated` | Recorded, but you have no active policy yet. |
+| `error` | Attest was unreachable. `recorded` is False; your app keeps serving. |
+
+Useful fields: `result.findings` (each with the instrument cited),
+`result.jurisdictions`, `result.tier`, `result.trace_id`, `result.output_hash`,
+and `result.summary()` for a one-line log entry.
+
+**Grouping steps.** By default each call is its own record. To tell one story
+across several steps, pass the trace from the first call:
+
+```python
+step1 = attest.gate({"draft": draft})
+attest.gate({"tool": "price_lookup", "result": price}, action="tool_call", trace=step1.trace_id)
+```
+
+**If Attest is down**, `gate()` returns a result with `recorded=False` rather
+than raising, so an outage on our side cannot take down your application. Pass
+`on_error="raise"` if you would rather handle it yourself.
+
+## Lower-level API (provenance: 2 calls)
+
+The original calls remain available if you want to record without evaluating, or
+need to control sequencing yourself.
 
 You need two things from your Attest contact: the **service URL** and your
 **API key**.

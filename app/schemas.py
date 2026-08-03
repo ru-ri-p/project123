@@ -228,6 +228,40 @@ class PackSubscriptionIn(BaseModel):
     enforcement: Literal["advisory"] = "advisory"  # blocking reserved for post-review
 
 
+GateStatus = Literal["compliant", "flagged", "blocked", "unevaluated"]
+
+
+class GateIn(BaseModel):
+    """One AI output to check and log."""
+
+    action: str = Field(
+        min_length=1,
+        description="What the AI did, in your own vocabulary (e.g. model_completion).",
+    )
+    output: dict[str, Any] = Field(description="The output and any context to evaluate.")
+    trace_id: str | None = Field(
+        default=None,
+        description="Omit for a standalone record; pass one to group several steps.",
+    )
+    policy_version: str | None = None
+
+
+class GateOut(BaseModel):
+    trace_id: str
+    status: GateStatus
+    allowed: bool
+    tier: str | None = None
+    reasons: list[str] = Field(default_factory=list)
+    findings: list[dict[str, Any]] = Field(default_factory=list)
+    jurisdictions: list[str] = Field(default_factory=list)
+    policy_version: str | None = None
+    decision_seq: int | None = None
+    output_seq: int
+    output_hash: str
+    signature: str
+    approval_id: str | None = None
+
+
 class PolicyDecisionOut(BaseModel):
     trace_id: str
     seq: int
@@ -240,6 +274,9 @@ class PolicyDecisionOut(BaseModel):
     findings: list[dict[str, Any]] = Field(default_factory=list)
     event_hash: str
     created_at: str
+    status: str | None = None
+    output_seq: int | None = None
+    output_hash: str | None = None
 
 
 class ComplianceSummaryOut(BaseModel):

@@ -183,6 +183,9 @@ def _decision_out(row: PolicyDecisionSummary) -> PolicyDecisionOut:
         findings=list(row.findings or []),
         event_hash=row.event_hash,
         created_at=row.created_at.isoformat(),
+        status=row.status,
+        output_seq=row.output_seq,
+        output_hash=row.output_hash,
     )
 
 
