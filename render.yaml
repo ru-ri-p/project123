@@ -50,6 +50,31 @@ services:
       - key: ADMIN_API_KEY
         sync: false
 
+  # --- Regulation watch cron ------------------------------------------------
+  # Runs where outbound access to the regulator sites exists. Auto-publishes only
+  # what is provable verbatim against the fetched official text; anything needing
+  # judgement is quarantined for review in /admin.
+  - type: cron
+    name: attest-regwatch
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    schedule: "0 3 * * *"
+    dockerCommand: python scripts/watch_regulations.py
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: attest-db
+          property: connectionString
+      - key: SIGNING_BACKEND
+        value: local
+      - key: SIGNING_PRIVATE_KEY_PATH
+        value: /etc/secrets/ed25519_private.pem
+      - key: SIGNING_PUBLIC_KEY_PATH
+        value: /etc/secrets/ed25519_public.pem
+      # Set to "false" to monitor without publishing anything.
+      - key: REGWATCH_AUTO_PUBLISH
+        value: "true"
+
   # --- Seal + anchor cron job ---------------------------------------------
   - type: cron
     name: attest-seal-anchor

@@ -266,6 +266,35 @@ class ProfileChangeRequestOut(BaseModel):
     created_at: str
 
 
+class RegulationChangeOut(BaseModel):
+    id: str
+    pack_code: str
+    url: str
+    change_type: str
+    status: str
+    summary: str
+    evidence: dict[str, Any] = Field(default_factory=dict)
+    published_version: str | None = None
+    created_at: str
+
+
+class RegulationSourceOut(BaseModel):
+    pack_code: str
+    url: str
+    content_hash: str | None = None
+    last_checked_at: str | None = None
+    last_status: str | None = None
+    last_error: str | None = None
+
+
+class WatchRunOut(BaseModel):
+    sources_checked: int
+    changes: int
+    auto_published: int
+    quarantined: int
+    checked_at: str
+
+
 class PackSubscriptionIn(BaseModel):
     pack_code: str = Field(min_length=1)
     enabled: bool = True
@@ -447,6 +476,7 @@ class AdminOrgOut(BaseModel):
     confidentiality_mode: str
     fail_mode: str
     created_at: str
+    requires_profile: bool = False
 
 
 class AdminOrgCreateIn(BaseModel):

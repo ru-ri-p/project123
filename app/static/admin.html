@@ -285,7 +285,7 @@
         <button class="btn" id="btn-orgs" style="padding:4px 12px;">Refresh</button></div>
       <div class="card" style="margin-bottom:14px;">
         <table>
-          <thead><tr><th>ORGANISATION</th><th>MODE</th><th>CREATED</th><th></th></tr></thead>
+          <thead><tr><th>ORGANISATION</th><th>MODE</th><th>CREATED</th><th>ONBOARDING</th><th></th></tr></thead>
           <tbody id="orgrows"><tr><td colspan="4" class="empty">Connect, then refresh.</td></tr></tbody>
         </table>
         <div id="keybanner-slot"></div>
@@ -334,6 +334,45 @@
           <button class="btn primary" id="btn-subscribe" style="margin-top:22px;">Apply</button>
         </div>
         <div id="orgpacks" style="margin-top:14px;"></div>
+      </div>
+    </section>
+
+    <!-- ==================== REGULATION WATCH ==================== -->
+    <section class="screen" id="scr-regwatch">
+      <h1>Regulation Watch</h1>
+      <div class="sub">Official sources are fetched on a schedule. Citations provable verbatim
+        against the fetched text publish automatically; anything needing judgement waits for you.</div>
+
+      <div class="banner blue" style="margin-bottom:18px;">
+        <b>Nothing is generated.</b> The pipeline only ever <i>confirms</i> claims already written
+        in a pack, against the official text they cite. A citation absent from the source is never
+        published, and a changed regulation never auto-updates rule meaning — deciding what a change
+        means is judgement, and that stays with a person.
+      </div>
+
+      <div class="card" style="margin-bottom:14px;">
+        <div class="row">
+          <div class="eyebrow">SOURCES</div>
+          <button class="btn" id="btn-rw-sources" style="margin:0 0 0 auto;padding:5px 12px;">Refresh</button>
+          <button class="btn primary" id="btn-rw-run" style="margin:0;padding:5px 12px;">Run sweep now</button>
+          <button class="btn" id="btn-rw-dry" style="margin:0;padding:5px 12px;">Dry run</button>
+        </div>
+        <div id="rw-sources" style="margin-top:10px;"><div class="empty">Connect, then refresh.</div></div>
+      </div>
+
+      <div class="card">
+        <div class="row">
+          <div class="eyebrow">CHANGES</div>
+          <select id="rw-filter" style="width:auto;margin-left:auto;">
+            <option value="quarantined">needs review</option>
+            <option value="">all</option>
+            <option value="auto_published">auto-published</option>
+            <option value="actioned">actioned</option>
+            <option value="dismissed">dismissed</option>
+          </select>
+          <button class="btn" id="btn-rw-changes" style="margin:0;padding:5px 12px;">Refresh</button>
+        </div>
+        <div id="rw-changes" style="margin-top:10px;"><div class="empty">Connect, then refresh.</div></div>
       </div>
     </section>
 
@@ -397,7 +436,7 @@ function handleAuthLoss(e) {
 }
 
 /* ---------- nav ---------- */
-const SCREENS = [["overview","Overview"],["requests","Access Requests"],["file","File a Request"],["orgs","Organisations"],["packs","Regulation Packs"],["trace","Trace Lookup"]];
+const SCREENS = [["overview","Overview"],["requests","Access Requests"],["file","File a Request"],["orgs","Organisations"],["packs","Regulation Packs"],["regwatch","Regulation Watch"],["trace","Trace Lookup"]];
 let current = "overview";
 function go(k) {
   current = k;
@@ -442,6 +481,7 @@ async function connect(keyValue) {
     showApp();
     toast("Connected.", "ok");
     loadOverview(); loadOrgs(); loadRequests(); loadPacks();
+    loadWatchSources(); loadWatchChanges();
   } catch (e) {
     // A stale key from a previous session is the common case — clear it so the
     // next reload does not silently retry a key the service already rejected.
@@ -718,8 +758,26 @@ async function loadOrgs() {
             <div class="mono" style="font-size:11px;color:var(--faint);">${esc(o.id)}</div></td>
         <td><span class="chip ${o.confidentiality_mode === "customer_key" ? "blue" : "grey"}">${o.confidentiality_mode === "customer_key" ? "CUSTOMER-HELD KEYS" : "ATTEST-MANAGED"}</span></td>
         <td class="mono" style="font-size:12px;color:var(--mut);">${esc(o.created_at.slice(0,10))}</td>
-        <td style="text-align:right;"><button class="btn danger" data-rotate="${esc(o.id)}" style="padding:5px 12px;font-size:12px;">Rotate key</button></td>
+        <td><span class="chip ${o.requires_profile ? "blue" : "amber"}" style="font-size:9.5px;">${o.requires_profile ? "ONBOARDING REQUIRED" : "GRANDFATHERED"}</span></td>
+        <td style="text-align:right;white-space:nowrap;">
+          <button class="btn" data-gate="${esc(o.id)}" data-on="${o.requires_profile ? "1" : "0"}"
+            style="padding:5px 10px;font-size:12px;">${o.requires_profile ? "Un-gate" : "Require onboarding"}</button>
+          <button class="btn danger" data-rotate="${esc(o.id)}" style="padding:5px 12px;font-size:12px;">Rotate key</button></td>
       </tr>`).join("") : '<tr><td colspan="4" class="empty">No organisations.</td></tr>';
+    document.querySelectorAll("[data-gate]").forEach((b) => b.addEventListener("click", async () => {
+      const on = b.dataset.on === "1";
+      const org = b.dataset.gate;
+      const msg = on
+        ? `Stop requiring onboarding for ${org}? They will be able to record without declaring a profile.`
+        : `Require onboarding for ${org}? They will NOT be able to record until they declare a profile — agree it with them first.`;
+      if (!confirm(msg)) return;
+      try {
+        await api.call(`/v1/admin/orgs/${encodeURIComponent(org)}/require-onboarding?required=${!on}`,
+                       { method: "POST" });
+        toast(on ? "Onboarding no longer required." : "Onboarding now required for " + org, "ok");
+        loadOrgs();
+      } catch (e) { if (!handleAuthLoss(e)) toast("Failed: " + e.message, "err"); }
+    }));
     document.querySelectorAll("[data-rotate]").forEach((b) => b.addEventListener("click", async () => {
       if (!confirm(`Rotate the API key for ${b.dataset.rotate}? The current key stops working immediately.`)) return;
       try {
@@ -840,6 +898,93 @@ $("#btn-subscribe").addEventListener("click", async () => {
     loadOrgPacks();
   } catch (e) { toast("Apply failed: " + e.message, "err"); }
 });
+
+/* ---------- regulation watch ---------- */
+const CHANGE_CHIP = {
+  quarantined:    ["amber", "NEEDS REVIEW"],
+  auto_published: ["blue",  "AUTO-PUBLISHED"],
+  actioned:       ["grey",  "ACTIONED"],
+  dismissed:      ["grey",  "DISMISSED"],
+};
+$("#btn-rw-sources").addEventListener("click", loadWatchSources);
+$("#btn-rw-changes").addEventListener("click", loadWatchChanges);
+$("#rw-filter").addEventListener("change", loadWatchChanges);
+$("#btn-rw-run").addEventListener("click", () => runWatch(true));
+$("#btn-rw-dry").addEventListener("click", () => runWatch(false));
+
+async function runWatch(publish) {
+  const b = publish ? $("#btn-rw-run") : $("#btn-rw-dry");
+  const label = b.textContent; b.disabled = true; b.textContent = "Sweeping…";
+  try {
+    const r = await api.call(`/v1/admin/regulation-watch/run?auto_publish=${publish}`,
+                             { method: "POST" });
+    toast(`Checked ${r.sources_checked} source(s): ${r.auto_published} auto-published, `
+          + `${r.quarantined} need review.`, r.quarantined ? "err" : "ok");
+    loadWatchSources(); loadWatchChanges();
+  } catch (e) { if (!handleAuthLoss(e)) toast("Sweep failed: " + e.message, "err"); }
+  b.disabled = false; b.textContent = label;
+}
+
+async function loadWatchSources() {
+  try {
+    const rows = await api.call("/v1/admin/regulation-watch/sources");
+    $("#rw-sources").innerHTML = rows.length ? `<table>
+      <thead><tr><th>PACK</th><th>OFFICIAL SOURCE</th><th>LAST CHECKED</th><th>STATE</th></tr></thead>
+      <tbody>${rows.map((r) => {
+        const bad = r.last_error || (r.last_status && r.last_status !== "200");
+        return `<tr>
+          <td class="mono" style="font-size:12px;">${esc(r.pack_code)}</td>
+          <td><a href="${esc(r.url)}" target="_blank" rel="noopener"
+                 style="color:var(--blue);font-size:12px;">${esc(r.url.slice(0, 64))}…</a>
+              ${r.content_hash ? `<div class="hash">snapshot ${esc(r.content_hash.slice(0,16))}…</div>` : ""}</td>
+          <td class="kv2 mono">${r.last_checked_at ? fmtT(r.last_checked_at) : "never"}</td>
+          <td><span class="chip ${bad ? "red" : r.last_checked_at ? "blue" : "grey"}">${
+            esc(r.last_error ? r.last_error.slice(0,40) : (r.last_status || "unchecked"))}</span></td>
+        </tr>`;
+      }).join("")}</tbody></table>` : '<div class="empty">No sources registered yet.</div>';
+  } catch (e) { if (!handleAuthLoss(e)) toast("Sources failed: " + e.message, "err"); }
+}
+
+async function loadWatchChanges() {
+  const f = $("#rw-filter").value;
+  try {
+    const rows = await api.call("/v1/admin/regulation-watch/changes" + (f ? `?status=${f}` : ""));
+    $("#rw-changes").innerHTML = rows.length ? rows.map((c) => {
+      const [cls, label] = CHANGE_CHIP[c.status] || ["grey", c.status.toUpperCase()];
+      const gates = (c.evidence && c.evidence.gates_passed) || [];
+      return `<div class="rowline" style="align-items:flex-start;">
+        <span class="chip ${cls}" style="min-width:118px;text-align:center;">${label}</span>
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:600;font-size:13.5px;">${esc(c.pack_code)}
+            <span class="kv2" style="font-weight:400;">· ${esc(c.change_type)}</span></div>
+          <div class="kv2" style="margin-top:2px;">${esc(c.summary)}</div>
+          ${gates.length ? `<div class="kv2" style="margin-top:4px;">gates passed:
+            ${gates.map((g) => `<span class="chip blue" style="font-size:9.5px;">${esc(g)}</span>`).join(" ")}
+            ${c.published_version ? `· published <span class="mono">${esc(c.published_version)}</span>` : ""}</div>` : ""}
+          ${c.evidence && c.evidence.confirmed ? `<div class="hash">confirmed: ${
+            esc(JSON.stringify(c.evidence.confirmed))}</div>` : ""}
+          <div class="kv2 mono" style="font-size:11px;">${fmtT(c.created_at)}</div>
+        </div>
+        ${c.status === "quarantined" ? `<div style="white-space:nowrap;">
+          <button class="btn" data-rwdone="${esc(c.id)}" style="padding:5px 10px;font-size:12px;">Actioned</button>
+          <button class="btn" data-rwdismiss="${esc(c.id)}" style="padding:5px 10px;font-size:12px;">Dismiss</button>
+        </div>` : ""}
+      </div>`;
+    }).join("") : '<div class="empty">Nothing here.</div>';
+
+    const review = async (id, status) => {
+      try {
+        await api.call(`/v1/admin/regulation-watch/changes/${id}/review?status=${status}`,
+                       { method: "POST" });
+        loadWatchChanges();
+      } catch (e) { if (!handleAuthLoss(e)) toast("Failed: " + e.message, "err"); }
+    };
+    document.querySelectorAll("[data-rwdone]").forEach((b) =>
+      b.addEventListener("click", () => review(b.dataset.rwdone, "actioned")));
+    document.querySelectorAll("[data-rwdismiss]").forEach((b) =>
+      b.addEventListener("click", () => review(b.dataset.rwdismiss, "dismissed")));
+  } catch (e) { if (!handleAuthLoss(e)) toast("Changes failed: " + e.message, "err"); }
+}
 
 /* ---------- trace lookup ---------- */
 async function doLookup(verify) {

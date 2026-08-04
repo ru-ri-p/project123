@@ -149,3 +149,73 @@ TRADEEASY PILOT
 Shelved at the user's instruction until the gate + settings work landed. The org
 is org_tradeeasy_ck (key attest_pilot_2h7k9m, to be rotated). The earlier consent
 test passed live: 403 before approval, 200 after, out-of-scope still 403.
+
+
+================================================================================
+SESSION — 2026-08-04 (continued)
+================================================================================
+
+BUILT
+-----
+9. TradeEasy onboarding control
+   - POST /v1/admin/orgs/{id}/require-onboarding + a per-org toggle in the ops
+     Organisations table, showing ONBOARDING REQUIRED / GRANDFATHERED.
+   - Built as a control rather than a shell command because production is not
+     reachable from the build environment. Click it for org_tradeeasy_ck when
+     they are ready — recording STOPS until they declare a profile, so agree it
+     with them first.
+
+10. Regulation auto-update (the watcher)
+   - app/services/reg_watch.py + scripts/watch_regulations.py + a daily Render
+     cron (attest-regwatch, 03:00) + a Regulation Watch screen in /admin.
+   - THE DESIGN POINT: nothing is generated. The pipeline only CONFIRMS claims a
+     human already wrote into a pack, against the official text they cite.
+     Three gates, all must pass or it is quarantined:
+       1 PROVENANCE  — HTTPS fetch from the URL registered against the pack;
+                       the exact text is snapshotted and hashed and retained, so
+                       any published claim stays re-checkable later.
+       2 VERBATIM    — the claim must appear literally in that snapshot
+                       (whitespace/case normalised only). No paraphrase, no
+                       inference. This is what makes fabrication structurally
+                       impossible rather than merely unlikely.
+       3 REPRODUCIBLE— extraction repeated 3x; only identical results pass.
+   - Auto-published: confirming a rule's `provision_candidate` when it is found
+     verbatim. Published as a NEW pack version (suffix +svYYYYMMDDHHMMSS) with
+     verification_status = source_verified — a status that means "mechanically
+     checked against the official text" and must NEVER be read as, or promoted
+     to, counsel_reviewed.
+   - NEVER auto-published: new obligations, changed tiers, altered meaning, or
+     anything at all when the source text drifted. Those quarantine, because
+     deciding what a changed regulation MEANS is judgement.
+   - Also detects: dead/moved sources (HTTP >=400) and fetch failures, both
+     surfaced loudly rather than ignored.
+   - REGWATCH_AUTO_PUBLISH=false turns publishing off while still monitoring.
+
+TESTING
+-------
+161 pytest tests. Nine browser E2E suites (added regwatch_e2e).
+tests/test_reg_watch.py is written as attacks, not happy paths: a plausible but
+absent citation ("Article 99") must not publish; paraphrase must not count as
+verbatim; a changed regulation must not auto-update content; non-HTTPS sources
+are refused; unreproducible extraction quarantines; already-confirmed provisions
+are never overwritten by the machine.
+
+NOTE ON THIS ENVIRONMENT
+------------------------
+The regulator hosts are blocked by org egress policy here, so every real fetch
+fails locally — which regwatch_e2e uses as a genuine check that unreachable
+sources are quarantined and shown, not silently skipped. Real fetching happens
+on the deployed cron, which has normal outbound access.
+
+STILL OPEN
+----------
+- Legal review of all pack content (deferred by the user). Everything remains
+  `unverified` except anything the watcher confirms, which becomes
+  `source_verified`. Neither is legal advice.
+- Populate `provision_candidate` on the existing packs — the watcher can only
+  confirm candidates that a human has written down, and the current packs mostly
+  have provision=None with no candidate, so there is little for it to confirm
+  until someone drafts the candidates.
+- Named user identity on both sides (biggest remaining trust gap).
+- Notifications on access requests. Key rotation. Repo consolidation.
+

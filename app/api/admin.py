@@ -9,13 +9,23 @@ once, in the response to the call that created it — only its hash is stored.
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.api.deps import require_admin
 from app.auth import hash_api_key
-from app.db.models import AccessGrantKey, AccessRequest, Event, Org, RegulationPack, Trace
+from app.db.models import (
+    AccessGrantKey,
+    AccessRequest,
+    Event,
+    Org,
+    RegulationChange,
+    RegulationPack,
+    RegulationSource,
+    Trace,
+)
 from app.db.session import get_db
 from app.schemas import (
     AdminOrgActivity,
@@ -31,10 +41,13 @@ from app.schemas import (
     EventReplayItem,
     PackSubscriptionIn,
     ProfileChangeRequestOut,
+    RegulationChangeOut,
     RegulationPackOut,
+    RegulationSourceOut,
     TraceReplayOut,
+    WatchRunOut,
 )
-from app.services import access_review
+from app.services import access_review, reg_watch
 from app.services import org_profile as profile_service
 from app.services import orgs as org_service
 from app.services import regulation_packs as pack_service
@@ -147,6 +160,7 @@ def _org_out(org: Org) -> AdminOrgOut:
         confidentiality_mode=org.confidentiality_mode,
         fail_mode=org.fail_mode,
         created_at=org.created_at.isoformat(),
+        requires_profile=org.requires_profile,
     )
 
 
@@ -189,6 +203,25 @@ def rotate_org_key(org_id: str, db: Session = Depends(get_db)) -> AdminOrgKeyOut
     org.api_key_hash = hash_api_key(plaintext_key)
     db.commit()
     return AdminOrgKeyOut(org_id=org_id, api_key=plaintext_key)
+
+
+@router.post("/orgs/{org_id}/require-onboarding", response_model=AdminOrgOut)
+def set_require_onboarding(
+    org_id: str, required: bool = True, db: Session = Depends(get_db)
+) -> AdminOrgOut:
+    """Turn the onboarding requirement on or off for one customer.
+
+    Orgs that predate the gate are grandfathered so a live integration is never
+    broken by a deploy. Use this to bring one of them under the gate once they
+    are ready — recording stops until they declare a profile, so agree it with
+    them first.
+    """
+    org = db.query(Org).filter(Org.id == org_id).one_or_none()
+    if org is None:
+        raise HTTPException(status_code=404, detail="org not found")
+    org.requires_profile = required
+    db.commit()
+    return _org_out(org)
 
 
 # --- Regulation packs ---------------------------------------------------------
@@ -266,6 +299,82 @@ def subscribe_org_to_pack(
     pack = pack_service.latest_pack_by_code(db, body.pack_code)
     assert pack is not None
     return _admin_pack_out(pack)
+
+
+# --- Regulation watch (auto-update pipeline) ----------------------------------
+
+
+@router.post("/regulation-watch/run", response_model=WatchRunOut)
+def run_regulation_watch(
+    auto_publish: bool = True, db: Session = Depends(get_db)
+) -> WatchRunOut:
+    """Sweep every registered official source now.
+
+    Also runs on a schedule. Auto-publication is limited to claims provable
+    verbatim against the fetched official text; anything needing judgement is
+    quarantined. Pass auto_publish=false to observe without publishing.
+    """
+    summary = reg_watch.run_watch(db, auto_publish=auto_publish)
+    db.commit()
+    return WatchRunOut(**summary)
+
+
+@router.get("/regulation-watch/sources", response_model=list[RegulationSourceOut])
+def list_watch_sources(db: Session = Depends(get_db)) -> list[RegulationSourceOut]:
+    reg_watch.register_sources(db)
+    db.commit()
+    return [
+        RegulationSourceOut(
+            pack_code=s.pack_code, url=s.url, content_hash=s.content_hash,
+            last_checked_at=s.last_checked_at.isoformat() if s.last_checked_at else None,
+            last_status=s.last_status, last_error=s.last_error,
+        )
+        for s in db.query(RegulationSource).order_by(RegulationSource.pack_code).all()
+    ]
+
+
+@router.get("/regulation-watch/changes", response_model=list[RegulationChangeOut])
+def list_watch_changes(
+    status: str | None = None, limit: int = 100, db: Session = Depends(get_db)
+) -> list[RegulationChangeOut]:
+    query = db.query(RegulationChange)
+    if status:
+        query = query.filter(RegulationChange.status == status)
+    rows = (
+        query.order_by(RegulationChange.created_at.desc())
+        .limit(max(1, min(limit, 500)))
+        .all()
+    )
+    return [
+        RegulationChangeOut(
+            id=str(c.id), pack_code=c.pack_code, url=c.url, change_type=c.change_type,
+            status=c.status, summary=c.summary, evidence=c.evidence or {},
+            published_version=c.published_version, created_at=c.created_at.isoformat(),
+        )
+        for c in rows
+    ]
+
+
+@router.post("/regulation-watch/changes/{change_id}/review", response_model=RegulationChangeOut)
+def review_watch_change(
+    change_id: str, status: str = "actioned", db: Session = Depends(get_db)
+) -> RegulationChangeOut:
+    """Close out a quarantined change once a person has dealt with it."""
+    if status not in ("actioned", "dismissed"):
+        raise HTTPException(status_code=422, detail="status must be actioned or dismissed")
+    change = db.get(RegulationChange, _parse_uuid(change_id))
+    if change is None:
+        raise HTTPException(status_code=404, detail="change not found")
+    change.status = status
+    change.reviewed_by = "attest_admin"
+    change.reviewed_at = datetime.now(UTC)
+    db.commit()
+    return RegulationChangeOut(
+        id=str(change.id), pack_code=change.pack_code, url=change.url,
+        change_type=change.change_type, status=change.status, summary=change.summary,
+        evidence=change.evidence or {}, published_version=change.published_version,
+        created_at=change.created_at.isoformat(),
+    )
 
 
 # --- Profile change requests (the anti-evasion control) -----------------------

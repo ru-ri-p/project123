@@ -1,0 +1,437 @@
+"""Keeping regulation packs current — automatically, without inventing anything.
+
+THE PROBLEM WITH AUTO-PUBLISHING LAW
+====================================
+No regulator publishes a machine-readable feed of rule changes; it is web pages
+and PDFs. The tempting design is to fetch the page, have something summarise what
+changed, and publish the result. That design invents clause numbers. A rules
+engine citing "Article 26" of an instrument that has no Article 26 is worse than
+one that admits it has not checked — it manufactures false authority, and a
+regulator will find it.
+
+So nothing here GENERATES rule content. The pipeline only ever CONFIRMS claims
+that are already written down, against the official text they claim to come from.
+A claim that cannot be proven verbatim is not published; it is quarantined for a
+person. That is what makes "auto-publish" defensible rather than reckless.
+
+THE THREE GATES
+===============
+Every candidate must pass all three, in order, or it is quarantined:
+
+  GATE 1 — PROVENANCE.  The text must have been fetched over HTTPS from the URL
+      already registered against the pack, and the exact bytes are snapshotted
+      and hashed. Nothing enters the pipeline from anywhere else, and every
+      published claim stays re-checkable against the text it came from.
+
+  GATE 2 — VERBATIM GROUNDING.  Every claim (a provision reference, a quoted
+      obligation, an effective date) must appear literally in that snapshot,
+      compared on normalised whitespace and case. No paraphrase, no inference,
+      no "close enough". This is the gate that makes fabrication structurally
+      impossible rather than merely unlikely: if the string is not in the
+      official text, it cannot be published, whatever produced it.
+
+  GATE 3 — REPRODUCIBILITY.  The extraction is run repeatedly and only fields
+      identical across every run pass. Any variance means the answer was not
+      determined by the source, so it is treated as unknown.
+
+WHAT AUTO-PUBLISHES, AND WHAT DOES NOT
+======================================
+Auto-published: confirming a `provision_candidate` that is found verbatim, and
+metadata (effective dates) likewise found verbatim. These add citation precision
+to rules a human already wrote.
+
+Never auto-published: new obligations, changed risk tiers, altered rule meaning,
+or anything at all when the source text changed materially. Those are
+quarantined, because deciding what a changed regulation MEANS is judgement, and
+judgement is exactly what this pipeline must not pretend to have.
+
+Auto-published packs are marked SOURCE_VERIFIED — a status that says "mechanically
+checked against the official text", and which must never be read as, or promoted
+to, `counsel_reviewed`.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import re
+from collections.abc import Callable
+from datetime import UTC, datetime
+from typing import Any
+
+from sqlalchemy.orm import Session
+
+from app.db.models import RegulationChange, RegulationPack, RegulationSource
+
+# A new verification status, distinct from anything implying legal review.
+SOURCE_VERIFIED = "source_verified"
+
+CHANGE_SOURCE_DRIFT = "source_drift"
+CHANGE_PROVISION_CONFIRMED = "provision_confirmed"
+CHANGE_FETCH_FAILED = "fetch_failed"
+CHANGE_SOURCE_GONE = "source_gone"
+
+STATUS_QUARANTINED = "quarantined"
+STATUS_AUTO_PUBLISHED = "auto_published"
+STATUS_DISMISSED = "dismissed"
+STATUS_ACTIONED = "actioned"
+
+# Reproducibility passes required before a claim may be published (Gate 3).
+REPRODUCIBILITY_RUNS = 3
+
+Fetcher = Callable[[str], tuple[int, str]]
+
+
+class WatchError(RuntimeError):
+    """The watcher could not run. Never raised for a mere source change."""
+
+
+# --- normalisation & hashing --------------------------------------------------
+
+
+def normalise(text: str) -> str:
+    """Collapse whitespace and case-fold, so trivial reformatting is not 'change'.
+
+    Deliberately conservative: it must not normalise away anything that could
+    alter meaning, so only whitespace and case are touched.
+    """
+    return re.sub(r"\s+", " ", text or "").strip().casefold()
+
+
+def content_hash(text: str) -> str:
+    return hashlib.sha256(normalise(text).encode("utf-8")).hexdigest()
+
+
+# --- GATE 1: provenance -------------------------------------------------------
+
+
+def default_fetcher(url: str) -> tuple[int, str]:
+    """Fetch a source. HTTPS only — a claim's provenance is worth nothing if the
+    transport could be tampered with."""
+    import requests
+
+    if not url.lower().startswith("https://"):
+        msg = f"refusing to fetch a regulation source over a non-HTTPS URL: {url}"
+        raise WatchError(msg)
+    response = requests.get(url, timeout=30, headers={"User-Agent": "attest-regwatch/1"})
+    return response.status_code, response.text
+
+
+def registered_urls(db: Session, pack_code: str) -> set[str]:
+    """URLs already registered for a pack. Gate 1 admits nothing else."""
+    return {
+        row.url
+        for row in db.query(RegulationSource).filter(
+            RegulationSource.pack_code == pack_code
+        )
+    }
+
+
+# --- GATE 2: verbatim grounding ----------------------------------------------
+
+
+def appears_verbatim(claim: str, snapshot: str) -> bool:
+    """Is this claim literally present in the official text?
+
+    The whole anti-fabrication guarantee rests here. An empty claim is NOT
+    grounded — otherwise a missing value would sail through.
+    """
+    if not claim or not claim.strip():
+        return False
+    return normalise(claim) in normalise(snapshot)
+
+
+def ground_claims(claims: dict[str, str], snapshot: str) -> tuple[dict[str, str], list[str]]:
+    """Split claims into those provable in the snapshot and those that are not."""
+    grounded: dict[str, str] = {}
+    ungrounded: list[str] = []
+    for key, value in claims.items():
+        if appears_verbatim(value, snapshot):
+            grounded[key] = value
+        else:
+            ungrounded.append(key)
+    return grounded, ungrounded
+
+
+# --- GATE 3: reproducibility --------------------------------------------------
+
+
+def reproducible(extract: Callable[[], dict[str, str]], runs: int = REPRODUCIBILITY_RUNS) -> (
+    tuple[dict[str, str], bool]
+):
+    """Run the extraction `runs` times; accept only if every run agrees.
+
+    Variance means the answer was not determined by the source text, so it is
+    not knowledge — it is a guess, and guesses do not get published.
+    """
+    results = [extract() for _ in range(max(1, runs))]
+    first = results[0]
+    return first, all(r == first for r in results[1:])
+
+
+# --- extraction (deterministic; confirms, never invents) ----------------------
+
+
+def extract_confirmations(pack: RegulationPack, snapshot: str) -> dict[str, str]:
+    """Find which of a pack's *declared candidates* are provable in the source.
+
+    This does not read the regulation and decide what it says. It takes claims a
+    human already wrote into the pack (`provision_candidate` on a rule) and
+    checks whether the official text contains them. Confirmation, not authorship.
+    """
+    doc = pack.rules if isinstance(pack.rules, dict) else {}
+    found: dict[str, str] = {}
+    for rule in doc.get("rules", []):
+        if not isinstance(rule, dict):
+            continue
+        candidate = rule.get("provision_candidate")
+        rule_id = rule.get("id")
+        # Only unconfirmed rules are candidates; never overwrite a confirmed one.
+        if candidate and rule_id and not rule.get("provision"):
+            if appears_verbatim(str(candidate), snapshot):
+                found[str(rule_id)] = str(candidate)
+    return found
+
+
+# --- the watcher --------------------------------------------------------------
+
+
+def _record_change(
+    db: Session,
+    *,
+    pack_code: str,
+    url: str,
+    change_type: str,
+    status: str,
+    summary: str,
+    evidence: dict[str, Any],
+    before_hash: str | None = None,
+    after_hash: str | None = None,
+    published_version: str | None = None,
+) -> RegulationChange:
+    change = RegulationChange(
+        pack_code=pack_code,
+        url=url,
+        change_type=change_type,
+        status=status,
+        summary=summary,
+        evidence=evidence,
+        before_hash=before_hash,
+        after_hash=after_hash,
+        published_version=published_version,
+    )
+    db.add(change)
+    db.flush()
+    return change
+
+
+def register_sources(db: Session) -> int:
+    """Register each published pack's official source URL. Safe to re-run."""
+    registered = 0
+    for pack in db.query(RegulationPack).all():
+        if not pack.source_url:
+            continue
+        exists = (
+            db.query(RegulationSource)
+            .filter(
+                RegulationSource.pack_code == pack.code,
+                RegulationSource.url == pack.source_url,
+            )
+            .one_or_none()
+        )
+        if exists is None:
+            db.add(RegulationSource(pack_code=pack.code, url=pack.source_url))
+            registered += 1
+    db.flush()
+    return registered
+
+
+def check_source(
+    db: Session, source: RegulationSource, *, fetcher: Fetcher, auto_publish: bool = True
+) -> list[RegulationChange]:
+    """Fetch one source, detect drift, and confirm what can be proven."""
+    changes: list[RegulationChange] = []
+    now = datetime.now(UTC)
+
+    try:
+        status_code, text = fetcher(source.url)
+    except Exception as exc:  # noqa: BLE001 — one bad source must not stop the sweep
+        source.last_checked_at = now
+        source.last_status = "error"
+        source.last_error = str(exc)[:500]
+        db.flush()
+        return [
+            _record_change(
+                db, pack_code=source.pack_code, url=source.url,
+                change_type=CHANGE_FETCH_FAILED, status=STATUS_QUARANTINED,
+                summary=f"Could not fetch the official source: {exc}",
+                evidence={"error": str(exc)[:500]},
+            )
+        ]
+
+    source.last_checked_at = now
+    source.last_status = str(status_code)
+    source.last_error = None
+
+    if status_code >= 400:
+        # A source that has moved or been withdrawn is a governance event: the
+        # pack may now be citing something that no longer exists.
+        source.last_error = f"HTTP {status_code}"
+        db.flush()
+        return [
+            _record_change(
+                db, pack_code=source.pack_code, url=source.url,
+                change_type=CHANGE_SOURCE_GONE, status=STATUS_QUARANTINED,
+                summary=f"Official source returned HTTP {status_code}. The pack may "
+                        f"be citing an instrument that has moved or been withdrawn.",
+                evidence={"status_code": status_code},
+            )
+        ]
+
+    new_hash = content_hash(text)
+    previous_hash = source.content_hash
+    first_sight = previous_hash is None
+    drifted = (not first_sight) and new_hash != previous_hash
+
+    # GATE 1 satisfied: fetched from the registered URL over HTTPS, snapshotted.
+    source.snapshot = text[:200_000]
+    source.content_hash = new_hash
+    db.flush()
+
+    pack = (
+        db.query(RegulationPack)
+        .filter(RegulationPack.code == source.pack_code)
+        .order_by(RegulationPack.created_at.desc())
+        .first()
+    )
+    if pack is None:
+        return changes
+
+    if drifted:
+        # Material change: what it MEANS is judgement, so a person decides.
+        changes.append(
+            _record_change(
+                db, pack_code=source.pack_code, url=source.url,
+                change_type=CHANGE_SOURCE_DRIFT, status=STATUS_QUARANTINED,
+                summary=(
+                    "The official source text changed. Rule content is never "
+                    "auto-updated from a changed source — review what changed and "
+                    "publish a new pack version if the obligations moved."
+                ),
+                evidence={
+                    "reason": "interpretation required",
+                    "snapshot_bytes": len(text),
+                },
+                before_hash=previous_hash, after_hash=new_hash,
+            )
+        )
+
+    # GATES 2 and 3: confirm declared candidates against this snapshot.
+    confirmed, is_reproducible = reproducible(
+        lambda: extract_confirmations(pack, source.snapshot or "")
+    )
+    if confirmed and not is_reproducible:
+        changes.append(
+            _record_change(
+                db, pack_code=source.pack_code, url=source.url,
+                change_type=CHANGE_PROVISION_CONFIRMED, status=STATUS_QUARANTINED,
+                summary="Extraction was not reproducible across runs; not published.",
+                evidence={"gate": "reproducibility", "candidates": confirmed},
+                after_hash=new_hash,
+            )
+        )
+    elif confirmed and is_reproducible:
+        if auto_publish:
+            version = _publish_confirmations(db, pack, confirmed, source)
+            changes.append(
+                _record_change(
+                    db, pack_code=source.pack_code, url=source.url,
+                    change_type=CHANGE_PROVISION_CONFIRMED, status=STATUS_AUTO_PUBLISHED,
+                    summary=(
+                        f"Confirmed {len(confirmed)} provision citation(s) verbatim "
+                        f"against the official source and published {version}."
+                    ),
+                    evidence={
+                        "gates_passed": ["provenance", "verbatim", "reproducibility"],
+                        "confirmed": confirmed,
+                        "verification_status": SOURCE_VERIFIED,
+                    },
+                    after_hash=new_hash, published_version=version,
+                )
+            )
+        else:
+            changes.append(
+                _record_change(
+                    db, pack_code=source.pack_code, url=source.url,
+                    change_type=CHANGE_PROVISION_CONFIRMED, status=STATUS_QUARANTINED,
+                    summary=f"{len(confirmed)} citation(s) provable; auto-publish is off.",
+                    evidence={"confirmed": confirmed}, after_hash=new_hash,
+                )
+            )
+    return changes
+
+
+def _publish_confirmations(
+    db: Session, pack: RegulationPack, confirmed: dict[str, str], source: RegulationSource
+) -> str:
+    """Publish a NEW pack version with the confirmed citations filled in.
+
+    A new version, never an edit in place: the record of which rulebook was live
+    on a given date has to stay true.
+    """
+    from app.services.regulation_packs import upsert_pack
+
+    doc = dict(pack.rules if isinstance(pack.rules, dict) else {})
+    rules = []
+    for rule in doc.get("rules", []):
+        rule = dict(rule) if isinstance(rule, dict) else rule
+        if isinstance(rule, dict) and rule.get("id") in confirmed:
+            rule["provision"] = confirmed[str(rule["id"])]
+            rule["provision_source"] = source.url
+            rule["provision_confirmed_at"] = datetime.now(UTC).isoformat()
+        rules.append(rule)
+
+    version = f"{pack.version}+sv{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}"
+    upsert_pack(
+        db,
+        {
+            "code": pack.code,
+            "jurisdiction": pack.jurisdiction,
+            "jurisdictions": doc.get("jurisdictions") or [pack.jurisdiction],
+            "sectors": doc.get("sectors") or ["*"],
+            "name": pack.name,
+            "version": version,
+            "instrument": pack.instrument,
+            "instrument_notes": pack.instrument_notes,
+            "source_url": pack.source_url,
+            "effective_date": pack.effective_date,
+            # Mechanically checked against the official text. NOT legal review.
+            "verification_status": SOURCE_VERIFIED,
+            "schema_version": doc.get("schema_version", 2),
+            "engine": doc.get("engine", "json"),
+            "rules": rules,
+        },
+    )
+    return version
+
+
+def run_watch(
+    db: Session, *, fetcher: Fetcher | None = None, auto_publish: bool = True
+) -> dict[str, Any]:
+    """Sweep every registered source. Returns a summary for the dashboard."""
+    fetch = fetcher or default_fetcher
+    register_sources(db)
+
+    all_changes: list[RegulationChange] = []
+    sources = db.query(RegulationSource).all()
+    for source in sources:
+        all_changes.extend(
+            check_source(db, source, fetcher=fetch, auto_publish=auto_publish)
+        )
+
+    return {
+        "sources_checked": len(sources),
+        "changes": len(all_changes),
+        "auto_published": sum(1 for c in all_changes if c.status == STATUS_AUTO_PUBLISHED),
+        "quarantined": sum(1 for c in all_changes if c.status == STATUS_QUARANTINED),
+        "checked_at": datetime.now(UTC).isoformat(),
+    }

@@ -353,6 +353,67 @@ class ProfileChangeRequest(Base):
     )
 
 
+class RegulationSource(Base):
+    """An official source a pack is drawn from, and what we last saw there.
+
+    The snapshot is retained deliberately: every auto-published claim must be
+    re-checkable against the exact text it was drawn from, months later, by
+    someone who does not trust us.
+    """
+
+    __tablename__ = "regulation_sources"
+    __table_args__ = (
+        UniqueConstraint("pack_code", "url", name="uq_regulation_source_pack_url"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    pack_code: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    url: Mapped[str] = mapped_column(Text, nullable=False)
+    # SHA-256 of the normalised fetched text — the drift signal.
+    content_hash: Mapped[str | None] = mapped_column(Text, nullable=True)
+    snapshot: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_checked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_status: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class RegulationChange(Base):
+    """Something changed at a source. Either auto-published or quarantined.
+
+    Auto-publication is only ever reached by claims that are provable verbatim
+    against the retained snapshot. Anything requiring judgement lands here as
+    `quarantined` and waits for a person.
+    """
+
+    __tablename__ = "regulation_changes"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    pack_code: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    url: Mapped[str] = mapped_column(Text, nullable=False)
+    # source_drift | provision_confirmed | fetch_failed | source_gone
+    change_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    # quarantined | auto_published | dismissed | actioned
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, server_default="quarantined", index=True
+    )
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    before_hash: Mapped[str | None] = mapped_column(Text, nullable=True)
+    after_hash: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # What was checked, and how it passed or failed — the audit of the audit.
+    evidence: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    published_version: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reviewed_by: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
 class SdkDevice(Base):
     """An SDK instance's own signing key, registered automatically on first run.
 
