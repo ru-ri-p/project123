@@ -10,6 +10,7 @@ FLAGGED = "flagged"
 BLOCKED = "blocked"
 UNEVALUATED = "unevaluated"
 ERROR = "error"
+MISCONFIGURED = "misconfigured"
 
 
 @dataclass(frozen=True)
@@ -65,6 +66,8 @@ class GateResult:
 
     def summary(self) -> str:
         """One line for your logs."""
+        if self.status == MISCONFIGURED:
+            return f"attest: setup incomplete — {self.reasons[0] if self.reasons else self.error}"
         if self.status == ERROR:
             return f"attest: not recorded ({self.error})"
         where = "buffered offline" if self.buffered else "recorded"
@@ -111,6 +114,20 @@ class GateResult:
             decision_seq=body.get("decision_seq"),
             approval_id=body.get("approval_id"),
             recorded=True,
+        )
+
+    @classmethod
+    def misconfigured(cls, detail: dict[str, Any], trace_id: str = "") -> GateResult:
+        """Setup is incomplete. Deliberately NOT buffered: the event could never
+        be replayed, and the real problem would hide behind a fake outage."""
+        return cls(
+            status=MISCONFIGURED,
+            allowed=True,
+            trace_id=trace_id,
+            reasons=[str(detail.get("message", "configuration required"))],
+            recorded=False,
+            buffered=False,
+            error=str(detail.get("code", "misconfigured")),
         )
 
     @classmethod

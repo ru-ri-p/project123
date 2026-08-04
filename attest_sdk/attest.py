@@ -21,6 +21,24 @@ DEFAULT_SERVER_TIMEOUT = 5.0
 ESCALATION_SERVER_TIMEOUT = 30.0
 
 
+def _configuration_error(exc: Exception) -> dict[str, Any] | None:
+    """Return the server's structured complaint if this was a config problem.
+
+    Distinguishes "you have not finished setting up" (409, actionable, must not
+    be buffered) from "we could not reach Attest" (buffer it and carry on).
+    """
+    response = getattr(exc, "response", None)
+    if response is None or response.status_code != 409:
+        return None
+    try:
+        detail = response.json().get("detail")
+    except ValueError:
+        return None
+    if isinstance(detail, dict) and detail.get("code"):
+        return detail
+    return None
+
+
 class AttestClient:
     def __init__(
         self,
@@ -105,6 +123,15 @@ class AttestClient:
             )
             response.raise_for_status()
         except requests.RequestException as exc:
+            # A configuration problem is NOT an outage. If onboarding is
+            # incomplete the server says so explicitly; buffering that would fill
+            # the queue with events that can never be replayed, and hide the real
+            # problem behind an apparent network fault.
+            config_error = _configuration_error(exc)
+            if config_error is not None:
+                if on_error == "raise":
+                    raise
+                return GateResult.misconfigured(config_error, trace_id=trace or "")
             if on_error == "raise":
                 raise
             if self.offline_enabled:
