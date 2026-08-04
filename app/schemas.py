@@ -403,6 +403,9 @@ class ComplianceSummaryOut(BaseModel):
     flagged_total: int
     by_tier: dict[str, int]
     by_jurisdiction: dict[str, int]
+    # Jurisdictions the profile says apply. Distinct from by_jurisdiction, which
+    # counts findings actually raised.
+    applied_jurisdictions: list[str] = Field(default_factory=list)
     unverified_packs: int
     active_policy_version: str | None = None
 

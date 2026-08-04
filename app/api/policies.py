@@ -26,7 +26,6 @@ from app.schemas import (
     JurisdictionOut,
     OrgProfileIn,
     OrgProfileOut,
-    PackSubscriptionIn,
     PolicyDecisionOut,
     PolicyOut,
     ProfileUpdateOut,
@@ -225,45 +224,21 @@ def get_compliance_summary(
         for pack, sub in pack_service.org_subscriptions(db, org.id)
         if sub.enabled and pack.verification_status == "unverified"
     )
+    # What APPLIES to them, from their declared profile — not merely which
+    # jurisdictions have produced a finding so far. The old version read "none"
+    # for a correctly-configured org that simply had not been checked yet.
+    profile = profile_service.get_profile(db, org.id)
+    applied_jurisdictions = sorted(profile.jurisdictions or []) if profile else []
     active = policy_repo.get_active_policy(db, org.id)
     return ComplianceSummaryOut(
         decisions_total=total,
         flagged_total=flagged,
         by_tier=by_tier,
         by_jurisdiction=by_jurisdiction,
+        applied_jurisdictions=applied_jurisdictions,
         unverified_packs=unverified,
         active_policy_version=active.version if active else None,
     )
-
-
-@router.post("/packs/subscribe", response_model=RegulationPackOut)
-def subscribe_pack(
-    body: PackSubscriptionIn,
-    org: Org = Depends(get_authenticated_org),
-    db: Session = Depends(get_db),
-) -> RegulationPackOut:
-    """Voluntarily adopt an ADDITIONAL rulebook beyond what the profile requires.
-
-    Deliberately add-only: there is no unsubscribe. Obligations follow from the
-    profile (jurisdictions x sectors), so a firm cannot drop a rulebook it is
-    subject to — that would be cherry-picking its way to a clean dashboard, which
-    is precisely what the profile model exists to prevent. Taking on MORE than
-    required is not evasion, so it is allowed and instant.
-    """
-    try:
-        sub = pack_service.subscribe_org(
-            db,
-            org_id=org.id,
-            pack_code=body.pack_code,
-            enabled=True,
-            enforcement=body.enforcement,
-        )
-    except pack_service.PackError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    db.commit()
-    pack = pack_service.latest_pack_by_code(db, body.pack_code)
-    assert pack is not None
-    return _pack_out(pack, enabled=sub.enabled, enforcement=sub.enforcement)
 
 
 # --- Settings: the institution's profile --------------------------------------

@@ -371,6 +371,10 @@ class RegulationSource(Base):
     url: Mapped[str] = mapped_column(Text, nullable=False)
     # SHA-256 of the normalised fetched text — the drift signal.
     content_hash: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # A differing hash awaiting confirmation on the next sweep. Drift is only
+    # reported once the same new content is seen twice, so a rotating banner or
+    # an A/B variant does not raise a false alarm every day.
+    pending_hash: Mapped[str | None] = mapped_column(Text, nullable=True)
     snapshot: Mapped[str | None] = mapped_column(Text, nullable=True)
     last_checked_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True

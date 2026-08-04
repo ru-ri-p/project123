@@ -66,6 +66,8 @@ from app.db.models import RegulationChange, RegulationPack, RegulationSource
 SOURCE_VERIFIED = "source_verified"
 
 CHANGE_SOURCE_DRIFT = "source_drift"
+CHANGE_SOURCE_BLOCKED = "source_blocked"
+CHANGE_SOURCE_UNAVAILABLE = "source_unavailable"
 CHANGE_PROVISION_CONFIRMED = "provision_confirmed"
 CHANGE_FETCH_FAILED = "fetch_failed"
 CHANGE_SOURCE_GONE = "source_gone"
@@ -88,17 +90,40 @@ class WatchError(RuntimeError):
 # --- normalisation & hashing --------------------------------------------------
 
 
+_SCRIPT_STYLE = re.compile(r"<(script|style)\b[^>]*>.*?</\1>", re.I | re.S)
+_COMMENT = re.compile(r"<!--.*?-->", re.S)
+_TAG = re.compile(r"<[^>]+>")
+
+
+def visible_text(html: str) -> str:
+    """Strip markup down to what a reader would see.
+
+    Regulator pages carry CSRF nonces, session ids, rotating banners and build
+    timestamps in scripts and tag attributes. Hashing the raw response makes all
+    of that look like the law changing, and a watcher that cries wolf every day
+    is worse than no watcher — the queue stops being read. Only the visible text
+    can meaningfully be said to have changed.
+    """
+    if not html:
+        return ""
+    text = _SCRIPT_STYLE.sub(" ", html)
+    text = _COMMENT.sub(" ", text)
+    text = _TAG.sub(" ", text)
+    return text
+
+
 def normalise(text: str) -> str:
     """Collapse whitespace and case-fold, so trivial reformatting is not 'change'.
 
-    Deliberately conservative: it must not normalise away anything that could
-    alter meaning, so only whitespace and case are touched.
+    Deliberately conservative beyond that: it must not normalise away anything
+    that could alter meaning, so only whitespace and case are touched.
     """
     return re.sub(r"\s+", " ", text or "").strip().casefold()
 
 
 def content_hash(text: str) -> str:
-    return hashlib.sha256(normalise(text).encode("utf-8")).hexdigest()
+    """Fingerprint the READABLE content, not the raw bytes."""
+    return hashlib.sha256(normalise(visible_text(text)).encode("utf-8")).hexdigest()
 
 
 # --- GATE 1: provenance -------------------------------------------------------
@@ -273,24 +298,56 @@ def check_source(
     source.last_error = None
 
     if status_code >= 400:
-        # A source that has moved or been withdrawn is a governance event: the
-        # pack may now be citing something that no longer exists.
+        # NOT all failures mean the same thing, and saying "may have been
+        # withdrawn" for a rate limit is simply false. Only 404/410 is evidence
+        # about the instrument; the rest is evidence about the fetch.
         source.last_error = f"HTTP {status_code}"
         db.flush()
+        if status_code in (404, 410):
+            change_type, summary = CHANGE_SOURCE_GONE, (
+                f"Official source returned HTTP {status_code}. The pack may be citing "
+                f"an instrument that has moved or been withdrawn — check the URL."
+            )
+        elif status_code in (401, 403):
+            change_type, summary = CHANGE_SOURCE_BLOCKED, (
+                f"Official source refused automated access (HTTP {status_code}). This "
+                f"says nothing about the instrument — the site is blocking the fetch. "
+                f"Check the URL by hand, or supply the text another way."
+            )
+        else:
+            change_type, summary = CHANGE_SOURCE_UNAVAILABLE, (
+                f"Official source was temporarily unavailable (HTTP {status_code}"
+                f"{' — rate limited' if status_code == 429 else ''}). Transient; the "
+                f"next sweep will retry. No conclusion about the instrument."
+            )
         return [
             _record_change(
                 db, pack_code=source.pack_code, url=source.url,
-                change_type=CHANGE_SOURCE_GONE, status=STATUS_QUARANTINED,
-                summary=f"Official source returned HTTP {status_code}. The pack may "
-                        f"be citing an instrument that has moved or been withdrawn.",
-                evidence={"status_code": status_code},
+                change_type=change_type, status=STATUS_QUARANTINED,
+                summary=summary, evidence={"status_code": status_code},
             )
         ]
 
     new_hash = content_hash(text)
     previous_hash = source.content_hash
     first_sight = previous_hash is None
-    drifted = (not first_sight) and new_hash != previous_hash
+    changed = (not first_sight) and new_hash != previous_hash
+
+    # Drift is only reported once the SAME new content has been seen twice.
+    # A single differing fetch is as likely to be a rotating banner or an A/B
+    # variant as a change in the law, and an alert that fires every day is one
+    # nobody reads.
+    drifted = False
+    if changed:
+        if source.pending_hash == new_hash:
+            drifted = True
+            source.pending_hash = None
+        else:
+            source.pending_hash = new_hash
+            db.flush()
+            return changes  # await confirmation on the next sweep
+    else:
+        source.pending_hash = None
 
     # GATE 1 satisfied: fetched from the registered URL over HTTPS, snapshotted.
     source.snapshot = text[:200_000]
@@ -313,9 +370,10 @@ def check_source(
                 db, pack_code=source.pack_code, url=source.url,
                 change_type=CHANGE_SOURCE_DRIFT, status=STATUS_QUARANTINED,
                 summary=(
-                    "The official source text changed. Rule content is never "
-                    "auto-updated from a changed source — review what changed and "
-                    "publish a new pack version if the obligations moved."
+                    "The official source text changed, confirmed across two "
+                    "consecutive sweeps. Rule content is never auto-updated from a "
+                    "changed source — review what changed and publish a new pack "
+                    "version if the obligations moved."
                 ),
                 evidence={
                     "reason": "interpretation required",

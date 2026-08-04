@@ -189,7 +189,10 @@ ADGM_DP: dict[str, Any] = {
         "STUB — structure only. Official ADGM sources were not reachable when "
         "this pack was drafted; no rule content has been written."
     ),
-    "source_url": "https://www.adgm.com/legal-framework/legislation",
+    # The deeper /legislation path returned 404 when the watcher first swept it —
+    # a real find. Pointing at the stable legal-framework root until someone
+    # confirms the correct deep link against the site.
+    "source_url": "https://www.adgm.com/legal-framework",
     "effective_date": None,
     "verification_status": UNVERIFIED,
     "schema_version": 2,

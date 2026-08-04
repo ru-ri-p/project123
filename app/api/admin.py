@@ -301,6 +301,20 @@ def subscribe_org_to_pack(
     return _admin_pack_out(pack)
 
 
+@router.post("/orgs/{org_id}/reconcile-packs")
+def reconcile_org_packs(org_id: str, db: Session = Depends(get_db)) -> dict[str, object]:
+    """Snap a customer's applied rulebooks to exactly what their profile derives.
+
+    For orgs carrying legacy subscriptions from when packs could be picked one by
+    one. Normally this happens by itself the next time they save their profile.
+    """
+    if db.query(Org).filter(Org.id == org_id).one_or_none() is None:
+        raise HTTPException(status_code=404, detail="org not found")
+    added, removed = profile_service.reconcile_packs(db, org_id)
+    db.commit()
+    return {"org_id": org_id, "added": added, "removed": removed}
+
+
 # --- Regulation watch (auto-update pipeline) ----------------------------------
 
 

@@ -319,12 +319,10 @@
           <button class="btn" id="btn-mypacks" style="margin:0 0 0 auto;padding:4px 12px;">Refresh</button>
         </div>
         <div id="mypacks" style="margin-top:10px;"><div class="empty">Connect to load.</div></div>
-        <div style="margin-top:14px;">
-          <div class="eyebrow" style="margin-bottom:8px;">AVAILABLE TO ADOPT</div>
-          <div class="row">
-            <select id="avail-packs" style="flex:1;"></select>
-            <button class="btn primary" id="btn-adopt" style="margin:0;">Adopt (advisory)</button>
-          </div>
+        <div class="kv2" style="margin-top:12px;">
+          These follow from your profile under <b style="cursor:pointer;text-decoration:underline;"
+          id="packs-gotosettings">Settings</b> — they are derived, not chosen. To take on another
+          rulebook, declare the sector or jurisdiction that implies it.
         </div>
       </div>
 
@@ -844,8 +842,10 @@ async function loadSummary() {
     $("#cs-cleanline").textContent = s.decisions_total
       ? `${clean.toLocaleString()} passed with no problem`
       : "nothing checked yet";
-    const js = Object.keys(s.by_jurisdiction);
-    $("#cs-juris").textContent = js.length ? js.map((j) => JURIS_LABEL[j] || j).join(", ") : "none";
+    const js = s.applied_jurisdictions || [];
+    $("#cs-juris").textContent = js.length
+      ? js.map((j) => JURIS_LABEL[j] || j).join(", ")
+      : "not set — complete Settings";
     $("#cs-unverified").textContent = s.unverified_packs > 0
       ? `${s.unverified_packs} rulebook${s.unverified_packs > 1 ? "s" : ""} pending legal review`
       : "";
@@ -874,11 +874,7 @@ $("#btn-starter-policy").addEventListener("click", async () => {
 
 async function loadMyPacks() {
   try {
-    const [mine, avail] = await Promise.all([
-      api.call("/v1/policies/packs/mine"),
-      api.call("/v1/policies/packs"),
-    ]);
-    const mineCodes = new Set(mine.map((p) => p.code));
+    const mine = await api.call("/v1/policies/packs/mine");
     $("#mypacks").innerHTML = mine.length ? mine.map((p) => {
       const [cls, label] = VERIF[p.verification_status] || ["grey", p.verification_status];
       return `<div class="rowline">
@@ -892,22 +888,10 @@ async function loadMyPacks() {
         <span class="chip blue">${esc((p.enforcement || "advisory").toUpperCase())}</span>
       </div>`;
     }).join("") : '<div class="empty">No jurisdiction rulebooks applied yet.</div>';
-    const options = avail.filter((p) => !mineCodes.has(p.code));
-    $("#avail-packs").innerHTML = options.length
-      ? options.map((p) => `<option value="${esc(p.code)}">${esc(JURIS_LABEL[p.jurisdiction] || p.jurisdiction)} — ${esc(p.name)}</option>`).join("")
-      : '<option value="">(all available rulebooks already adopted)</option>';
+
   } catch (e) { toast("Rulebooks failed: " + e.message, "err"); }
 }
-$("#btn-adopt").addEventListener("click", async () => {
-  const code = $("#avail-packs").value;
-  if (!code) { toast("Nothing to adopt.", "err"); return; }
-  try {
-    await api.call("/v1/policies/packs/subscribe", { method: "POST",
-      body: { pack_code: code, enabled: true, enforcement: "advisory" } });
-    toast("Rulebook adopted (advisory).", "ok");
-    loadMyPacks(); loadSummary();
-  } catch (e) { toast("Adopt failed: " + e.message, "err"); }
-});
+$("#packs-gotosettings").addEventListener("click", () => go("settings"));
 
 async function loadDecisions() {
   const flagged = $("#flagged-only").checked;

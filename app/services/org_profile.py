@@ -13,9 +13,12 @@ Asymmetric change control, because the risk is asymmetric:
     sheds obligations, and it is exactly the evasion that picking rulebooks
     à la carte would have allowed.
 
-Voluntary extras are still permitted: a firm may adopt a rulebook its profile
-does not require (preparing for a new market, say). It simply cannot subtract
-from the derived floor.
+There is no second route in. The "adopt a rulebook" picker has been removed: it
+was the visible remnant of cherry-picking, and it let the applied set drift away
+from who the firm actually is. A firm carrying rulebooks that do not apply to it
+is as wrong as one missing rulebooks that do — both make the dashboard
+meaningless. To take on another rulebook, declare the sector or jurisdiction that
+implies it, which is the honest way to acquire the obligation anyway.
 """
 
 from __future__ import annotations
@@ -24,7 +27,13 @@ from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
-from app.db.models import Org, OrgProfile, ProfileChangeRequest, RegulationPack
+from app.db.models import (
+    Org,
+    OrgProfile,
+    OrgRegulationPack,
+    ProfileChangeRequest,
+    RegulationPack,
+)
 from app.domain.jurisdictions import JURISDICTIONS
 from app.domain.sectors import validate_sectors
 
@@ -77,11 +86,43 @@ def mandatory_packs(db: Session, org_id: str) -> list[RegulationPack]:
     ]
 
 
+def reconcile_packs(db: Session, org_id: str) -> tuple[list[str], list[str]]:
+    """Make the applied rulebooks equal exactly what the profile derives.
+
+    The profile is the single source of truth. A firm that declares DIFC and
+    capital markets must not be carrying ADGM: being measured against
+    regulations that do not apply to it is as wrong as missing ones that do, and
+    it makes the dashboard meaningless.
+
+    Removing here is safe precisely because reductions are already gated —
+    shrinking a profile needs Attest's approval, so a pack can only fall away
+    after a human agreed the change. Nothing is shed unilaterally.
+
+    Returns (added, removed) pack codes.
+    """
+    from app.services.regulation_packs import org_subscriptions, subscribe_org
+
+    required = {pack.code: pack for pack in mandatory_packs(db, org_id)}
+    current = {pack.code: sub for pack, sub in org_subscriptions(db, org_id)}
+
+    added = [code for code in required if code not in current]
+    for code in added:
+        subscribe_org(db, org_id=org_id, pack_code=code)
+
+    removed = [code for code in current if code not in required]
+    for code in removed:
+        db.query(OrgRegulationPack).filter(
+            OrgRegulationPack.org_id == org_id,
+            OrgRegulationPack.pack_id == current[code].pack_id,
+        ).delete()
+
+    db.flush()
+    return sorted(added), sorted(removed)
+
+
 def _apply(
     db: Session, *, org_id: str, jurisdictions: list[str], sectors: list[str], actor: str
 ) -> OrgProfile:
-    from app.services.regulation_packs import subscribe_org
-
     profile = get_profile(db, org_id)
     if profile is None:
         profile = OrgProfile(org_id=org_id, jurisdictions=jurisdictions, sectors=sectors)
@@ -93,12 +134,10 @@ def _apply(
     profile.updated_by = actor
     db.flush()
 
-    # Subscribe to everything the new profile implies. Subscriptions are never
-    # removed here: a pack that stops being mandatory becomes a voluntary extra
-    # rather than silently switching off.
-    for pack in mandatory_packs(db, org_id):
-        subscribe_org(db, org_id=org_id, pack_code=pack.code)
-    db.flush()
+    # Applied rulebooks always equal what the profile derives — including
+    # dropping ones it no longer implies, and clearing legacy subscriptions made
+    # back when packs could be picked one by one.
+    reconcile_packs(db, org_id)
     return profile
 
 

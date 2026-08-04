@@ -115,6 +115,10 @@ def test_changed_regulation_never_auto_updates_rule_content(db) -> None:
     db.commit()
 
     changed = OFFICIAL_TEXT + "\nArticle 30 — A brand new obligation appears.\n"
+    # Drift needs confirming across two sweeps, so the first sighting is silent.
+    first = reg_watch.check_source(db, source, fetcher=_fetcher(changed))
+    db.commit()
+    assert not [c for c in first if c.change_type == reg_watch.CHANGE_SOURCE_DRIFT]
     changes = reg_watch.check_source(db, source, fetcher=_fetcher(changed))
     db.commit()
 
@@ -205,6 +209,65 @@ def test_a_confirmed_citation_carries_its_evidence(db) -> None:
     # The snapshot the claim was proven against is retained.
     assert source.snapshot and "Article 26" in source.snapshot
     assert source.content_hash
+
+
+def test_transient_failures_are_not_reported_as_withdrawn(db) -> None:
+    """A rate limit says nothing about the instrument. Claiming it "may have been
+    withdrawn" is simply false, and production hit exactly this on DIFC."""
+    from app.services import reg_watch
+
+    pack = _pack(db, candidates={"r1": "Article 26"})
+    reg_watch.register_sources(db)
+    source = next(
+        s for s in db.query(reg_watch.RegulationSource).all() if s.pack_code == pack.code
+    )
+
+    for status, expected_type, must_say in (
+        (429, reg_watch.CHANGE_SOURCE_UNAVAILABLE, "rate limited"),
+        (503, reg_watch.CHANGE_SOURCE_UNAVAILABLE, "Transient"),
+        (403, reg_watch.CHANGE_SOURCE_BLOCKED, "blocking the fetch"),
+        (404, reg_watch.CHANGE_SOURCE_GONE, "withdrawn"),
+    ):
+        changes = reg_watch.check_source(db, source, fetcher=_fetcher("", status=status))
+        db.commit()
+        assert changes[0].change_type == expected_type, status
+        assert must_say in changes[0].summary, status
+        if status != 404:
+            assert "withdrawn" not in changes[0].summary, f"{status} must not claim withdrawal"
+
+
+def test_volatile_page_furniture_is_not_mistaken_for_a_law_change() -> None:
+    """Nonces and scripts change on every fetch; the law does not."""
+    from app.services.reg_watch import content_hash
+
+    a = '<html><head><script>var t=1754280000;</script></head><body>Article 26</body></html>'
+    b = '<html><head><script>var t=9999999999;</script></head><body>Article 26</body></html>'
+    assert content_hash(a) == content_hash(b), "script noise must not read as drift"
+
+    c = '<html><body>Article 26 and Article 30</body></html>'
+    assert content_hash(a) != content_hash(c), "real text changes must still register"
+
+
+def test_drift_is_only_reported_once_confirmed(db) -> None:
+    from app.services import reg_watch
+
+    pack = _pack(db, candidates={"r1": "Article 26"})
+    reg_watch.register_sources(db)
+    source = next(
+        s for s in db.query(reg_watch.RegulationSource).all() if s.pack_code == pack.code
+    )
+    reg_watch.check_source(db, source, fetcher=_fetcher(OFFICIAL_TEXT))
+    db.commit()
+
+    # A one-off different response must NOT raise an alert...
+    odd = OFFICIAL_TEXT + " transient banner"
+    assert not [c for c in reg_watch.check_source(db, source, fetcher=_fetcher(odd))
+                if c.change_type == reg_watch.CHANGE_SOURCE_DRIFT]
+    db.commit()
+    # ...and if the page reverts, nothing is ever reported.
+    assert not [c for c in reg_watch.check_source(db, source, fetcher=_fetcher(OFFICIAL_TEXT))
+                if c.change_type == reg_watch.CHANGE_SOURCE_DRIFT]
+    db.commit()
 
 
 def test_a_dead_source_is_flagged_not_ignored(db) -> None:

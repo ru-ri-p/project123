@@ -219,3 +219,35 @@ STILL OPEN
 - Named user identity on both sides (biggest remaining trust gap).
 - Notifications on access requests. Key rotation. Repo consolidation.
 
+FIRST PRODUCTION SWEEP (2026-08-04) — what it found, and what it fixed
+---------------------------------------------------------------------
+The user ran the sweep on the live service. Results, and what each meant:
+  - uae_onshore_core -> HTTP 200, snapshot taken. The pipeline works end to end
+    against a real regulator site.
+  - adgm_dp_regs -> HTTP 404. A REAL find: the pack cited a dead URL
+    (/legal-framework/legislation). Corrected to /legal-framework pending someone
+    confirming the right deep link.
+  - difc_dp_law / difc_dp_reg10 -> HTTP 429 (rate limited).
+
+Two bugs of mine that the sweep exposed, both now fixed:
+  1. EVERY status >=400 was reported as "may have been withdrawn". For a 429 that
+     is simply false. Now classified: 404/410 = source_gone (evidence about the
+     instrument); 401/403 = source_blocked (bot protection, says nothing about the
+     instrument); everything else = source_unavailable (transient, will retry).
+  2. Raw response bytes were hashed, so CSRF nonces, scripts and rotating banners
+     read as "the law changed". Now only VISIBLE TEXT is hashed (scripts, styles,
+     comments and tags stripped), AND drift must be confirmed on two consecutive
+     sweeps before it is reported (regulation_sources.pending_hash). A watcher
+     that cries wolf daily is one nobody reads.
+
+Also this session: applied rulebooks now follow the profile exactly
+(reconcile_packs). The "Adopt (advisory)" picker and its endpoint are GONE — it
+was the last cherry-pick route and let a DIFC firm carry ADGM. Legacy
+subscriptions self-heal on the next profile save; POST
+/v1/admin/orgs/{id}/reconcile-packs forces it. The "JURISDICTIONS APPLIED" tile
+now reads the profile rather than counting findings (it said "none" for a
+correctly configured org that simply had not been checked yet).
+
+NOTE ON RATE LIMITS: difc.com returned 429 to two near-simultaneous fetches. If
+that persists, space the sweep out or cache more aggressively — worth watching.
+

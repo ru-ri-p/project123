@@ -182,22 +182,81 @@ def test_attest_can_refuse_a_reduction(client) -> None:
     assert set(profile["sectors"]) == {"banking", "legal"}, "denied means unchanged"
 
 
-def test_extras_may_be_adopted_but_nothing_can_be_unsubscribed(client) -> None:
-    """Adding obligations is fine; there must be no route to subtract them."""
+def test_there_is_no_route_to_adopt_a_pack_directly(client) -> None:
+    """The picker was the visible remnant of cherry-picking; it is gone, and so
+    is the endpoint behind it. Rulebooks come only from the profile."""
     key = _org(client)
     client.put("/v1/policies/profile", headers={"x-api-key": key},
                json={"jurisdictions": ["difc"], "sectors": ["capital_markets"]})
-
     r = client.post("/v1/policies/packs/subscribe", headers={"x-api-key": key},
                     json={"pack_code": "adgm_dp_regs"})
-    assert r.status_code == 200, "voluntarily taking on more must be allowed"
+    assert r.status_code == 405 or r.status_code == 404, r.status_code
 
-    # Even asking for it to be disabled does not disable it.
-    client.post("/v1/policies/packs/subscribe", headers={"x-api-key": key},
-                json={"pack_code": "difc_dp_reg10", "enabled": False})
-    mine = {p["code"]: p for p in client.get("/v1/policies/packs/mine",
-                                             headers={"x-api-key": key}).json()}
-    assert mine["difc_dp_reg10"]["enabled"] is True
+
+def test_applied_rulebooks_always_equal_what_the_profile_derives(client) -> None:
+    """The bug this fixes: a DIFC firm was carrying ADGM, because legacy
+    subscriptions were never reconciled against the profile."""
+    from app.db.models import OrgRegulationPack
+    from app.db.session import SessionLocal
+    from app.services.regulation_packs import latest_pack_by_code
+
+    key = _org(client)
+    org_id = client.get("/v1/org/me", headers={"x-api-key": key}).json()["id"]
+    client.put("/v1/policies/profile", headers={"x-api-key": key},
+               json={"jurisdictions": ["difc"], "sectors": ["capital_markets"]})
+
+    # Simulate a legacy subscription from the cherry-pick era.
+    db = SessionLocal()
+    adgm = latest_pack_by_code(db, "adgm_dp_regs")
+    db.add(OrgRegulationPack(org_id=org_id, pack_id=adgm.id))
+    db.commit()
+    db.close()
+    mine = {p["code"] for p in client.get("/v1/policies/packs/mine",
+                                          headers={"x-api-key": key}).json()}
+    assert "adgm_dp_regs" in mine, "precondition: the stray subscription exists"
+
+    # Saving the profile again snaps the applied set back to the truth.
+    client.put("/v1/policies/profile", headers={"x-api-key": key},
+               json={"jurisdictions": ["difc"], "sectors": ["capital_markets"]})
+    mine = {p["code"] for p in client.get("/v1/policies/packs/mine",
+                                          headers={"x-api-key": key}).json()}
+    assert "adgm_dp_regs" not in mine, "a rulebook that does not apply must be removed"
+    assert "difc_dp_reg10" in mine and "uae_fin_enabling_tech" in mine
+
+
+def test_approved_reduction_removes_the_rulebooks_it_dropped(client) -> None:
+    """Removal only happens AFTER Attest approves, so nothing is shed unilaterally."""
+    key = _org(client)
+    client.put("/v1/policies/profile", headers={"x-api-key": key}, json={
+        "jurisdictions": ["difc", "uae_onshore"], "sectors": ["banking"]})
+    assert "cbuae_ai_consumer" in {
+        p["code"] for p in client.get("/v1/policies/packs/mine",
+                                      headers={"x-api-key": key}).json()}
+
+    req_id = client.put("/v1/policies/profile", headers={"x-api-key": key}, json={
+        "jurisdictions": ["difc"], "sectors": ["banking"],
+        "reason": "onshore entity wound up"}).json()["request_id"]
+    # Still applied while pending — the request must not be the evasion.
+    assert "cbuae_ai_consumer" in {
+        p["code"] for p in client.get("/v1/policies/packs/mine",
+                                      headers={"x-api-key": key}).json()}
+
+    client.post(f"/v1/admin/profile-changes/{req_id}/decide?approve=true", headers=A)
+    assert "cbuae_ai_consumer" not in {
+        p["code"] for p in client.get("/v1/policies/packs/mine",
+                                      headers={"x-api-key": key}).json()}
+
+
+def test_compliance_summary_reports_applied_jurisdictions_from_the_profile(client) -> None:
+    """The tile said 'none' for a correctly-configured org that simply had not
+    been checked yet, because it was counting findings rather than obligations."""
+    key = _org(client)
+    client.put("/v1/policies/profile", headers={"x-api-key": key},
+               json={"jurisdictions": ["difc"], "sectors": ["capital_markets"]})
+    summary = client.get("/v1/policies/compliance-summary",
+                         headers={"x-api-key": key}).json()
+    assert summary["decisions_total"] == 0, "nothing checked yet"
+    assert summary["applied_jurisdictions"] == ["difc"], "yet DIFC plainly applies"
 
 
 def test_invalid_profiles_are_rejected(client) -> None:
