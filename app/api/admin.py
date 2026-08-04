@@ -359,9 +359,15 @@ def list_watch_sources(db: Session = Depends(get_db)) -> list[RegulationSourceOu
             pack_code=s.pack_code, url=s.url, content_hash=s.content_hash,
             last_checked_at=s.last_checked_at.isoformat() if s.last_checked_at else None,
             next_check_at=s.next_check_at.isoformat() if s.next_check_at else None,
+            retired_at=s.retired_at.isoformat() if s.retired_at else None,
             last_status=s.last_status, last_error=s.last_error,
         )
-        for s in db.query(RegulationSource).order_by(RegulationSource.pack_code).all()
+        # Live sources first; retired ones stay visible, because a URL we used to
+        # cite is history worth being able to see, not something to hide.
+        for s in db.query(RegulationSource)
+        .order_by(RegulationSource.retired_at.asc().nullsfirst(),
+                  RegulationSource.pack_code)
+        .all()
     ]
 
 

@@ -63,6 +63,17 @@ def _pack(db, *, candidates: dict[str, str] | None = None, code: str | None = No
     return pack
 
 
+def _sources(db, pack_code):
+    from app.services import reg_watch
+
+    return [
+        s
+        for s in db.query(reg_watch.RegulationSource).filter(
+            reg_watch.RegulationSource.pack_code == pack_code
+        )
+    ]
+
+
 def _fetcher(text: str, status: int = 200):
     return lambda url: (status, text)
 
@@ -527,3 +538,113 @@ def test_a_never_checked_source_is_picked_up_first(db) -> None:
         "and it sorts ahead of merely overdue sources, so a new pack is never starved"
     )
 
+
+
+# --- a corrected source URL must actually displace the old one ----------------
+
+
+def test_a_corrected_source_url_retires_the_dead_one(db) -> None:
+    """The ops dashboard showed ADGM's OLD, dead URL being fetched daily long
+    after it was corrected. Each pack VERSION is its own row, so the previous
+    version kept re-registering its dead link on every sweep — a watcher that
+    reports the same 404 forever is one nobody reads."""
+    from app.services import reg_watch
+    from app.services.regulation_packs import upsert_pack
+
+    code = f"testpack_{uuid.uuid4().hex[:8]}"
+    dead = "https://example.test/legal-framework/legislation"
+    good = "https://example.test/legal-framework"
+
+    def publish(version: str, url: str):
+        upsert_pack(db, {
+            "code": code, "jurisdiction": "adgm", "jurisdictions": ["adgm"],
+            "sectors": ["*"], "name": "Test", "version": version,
+            "instrument": "Test Instrument", "source_url": url,
+            "verification_status": "unverified", "schema_version": 2,
+            "engine": "json", "rules": [],
+        })
+        db.commit()
+
+    publish("1.0", dead)
+    reg_watch.register_sources(db)
+    db.flush()
+    assert {s.url for s in _sources(db, code)} == {dead}
+
+    # The dead link is found and corrected — a new pack VERSION, as required.
+    publish("1.1", good)
+    reg_watch.register_sources(db)
+    db.flush()
+
+    by_url = {s.url: s for s in _sources(db, code)}
+    assert set(by_url) == {dead, good}, "the old row is kept, not deleted"
+    assert by_url[good].retired_at is None, "the corrected URL is live"
+    assert by_url[dead].retired_at is not None, "the dead one is retired"
+
+    # And crucially: never fetched again, however overdue it looks.
+    due = {s.url for s in reg_watch.due_sources(db, limit=0)}
+    assert good in due and dead not in due
+
+    # Re-running must not resurrect it — this is what looped before.
+    reg_watch.register_sources(db)
+    db.flush()
+    assert {s.url for s in reg_watch.due_sources(db, limit=0) if s.pack_code == code} == {good}
+
+
+def test_a_retired_source_keeps_its_evidence(db) -> None:
+    """Retired, never deleted: the snapshot is the evidence behind anything
+    published from that source, and an auditor must still be able to check it."""
+    from app.services import reg_watch
+    from app.services.regulation_packs import upsert_pack
+
+    pack = _pack(db, candidates={"r1": "Article 26"})
+    reg_watch.register_sources(db)
+    source = next(s for s in _sources(db, pack.code))
+    reg_watch.check_source(db, source, fetcher=_fetcher(OFFICIAL_TEXT), auto_publish=False)
+    db.flush()
+    assert source.snapshot and source.content_hash
+
+    upsert_pack(db, {
+        "code": pack.code, "jurisdiction": "difc", "jurisdictions": ["difc"],
+        "sectors": ["*"], "name": "Test Pack", "version": "2.0",
+        "instrument": "Test Instrument", "source_url": "https://example.test/moved",
+        "verification_status": "unverified", "schema_version": 2,
+        "engine": "json", "rules": [],
+    })
+    db.commit()
+    reg_watch.register_sources(db)
+    db.flush()
+
+    assert source.retired_at is not None
+    assert source.snapshot, "the snapshot survives retirement"
+    assert source.content_hash, "and so does the hash it was verified against"
+
+
+def test_a_pack_citing_a_url_again_brings_it_back(db) -> None:
+    """Retirement must be reversible, or a reverted correction is unfetchable."""
+    from app.services import reg_watch
+    from app.services.regulation_packs import upsert_pack
+
+    code = f"testpack_{uuid.uuid4().hex[:8]}"
+    a, b = "https://example.test/a", "https://example.test/b"
+
+    def publish(version: str, url: str):
+        upsert_pack(db, {
+            "code": code, "jurisdiction": "difc", "jurisdictions": ["difc"],
+            "sectors": ["*"], "name": "Test", "version": version,
+            "instrument": "I", "source_url": url, "verification_status": "unverified",
+            "schema_version": 2, "engine": "json", "rules": [],
+        })
+        db.commit()
+
+    publish("1.0", a)
+    reg_watch.register_sources(db)
+    publish("1.1", b)
+    reg_watch.register_sources(db)
+    db.flush()
+    assert {s.url for s in _sources(db, code) if s.retired_at is None} == {b}
+
+    publish("1.2", a)  # the correction is reverted
+    reg_watch.register_sources(db)
+    db.flush()
+    live = {s.url for s in _sources(db, code) if s.retired_at is None}
+    assert live == {a}, "the original comes back live, and b retires"

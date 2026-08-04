@@ -343,3 +343,46 @@ no real pack carries a provision_candidate. Expect auto_published:0 on every
 sweep and do not read it as a fault — today it is a drift-and-dead-link
 detector. Filling that in needs the official texts, which this environment
 cannot reach.
+
+--------------------------------------------------------------------------------
+SESSION: 2026-08-04 (cont.) — a screenshot found a real bug
+--------------------------------------------------------------------------------
+Founder sent the deployed Regulation Watch screen. It showed ADGM's OLD, dead URL
+(/legal-framework/legislation) still being fetched, long after we corrected it to
+/legal-framework. Confirmed locally: TWO source rows for adgm_dp_regs.
+
+CAUSE: register_sources walked EVERY pack row, and each published version is its
+own row. So the previous version kept re-registering its dead link on every
+sweep. The watcher would report that 404 daily, about a URL nothing cites — the
+exact crying-wolf failure the drift confirmation was built to avoid.
+
+FIX (migration d8e1f2a63b47, regulation_sources.retired_at):
+  - current_pack_urls() resolves the LATEST version per pack code. That is the
+    only thing that decides what gets fetched.
+  - register_sources now SYNCS rather than only adds: registers what is missing,
+    retires anything no pack cites any more, and un-retires a URL if a pack
+    cites it again (a reverted correction must still be fetchable).
+  - RETIRED, NOT DELETED. The snapshot is the evidence behind anything published
+    from that source and has to stay re-checkable by an auditor who does not
+    trust us. Retired rows stay visible in the ops table, greyed, marked NO
+    LONGER CITED, sorted last, never fetched, excluded from every count.
+  - Verified against the real data: the dead ADGM URL retires, the corrected one
+    stays live.
+
+ALSO: the STATE chip was rendering the raw Python exception
+("HTTPSConnectionPool(host='www.adgm.com', port..."). The stored last_error stays
+exact — that is what an engineer needs — but the chip now says UNREACHABLE /
+TIMED OUT / TLS FAILED / DNS FAILED / HTTP 429 · RATE LIMITED, with the full text
+in the tooltip.
+
+DEPLOY CONFUSION WORTH REMEMBERING: the screenshot also lacked the NEXT DUE
+column, which could mean a stale deploy OR a cached admin.html. Told the founder
+to hard-reload first, and gave a Render-shell python check (no curl in that
+container) that reads the deployed code and alembic version directly, so a cache
+cannot fool it. Also flagged that the old "may have been withdrawn" wording on
+existing change rows is STORED TEXT from the old sweep — it will always read that
+way, and is not evidence about which code is running.
+
+Tests: +3 in test_reg_watch.py (corrected URL retires the dead one and does not
+resurrect on re-run; a retired source keeps its snapshot and hash; citing a URL
+again brings it back). 181 passed; all ten E2E suites pass.

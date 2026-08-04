@@ -379,6 +379,13 @@ class RegulationSource(Base):
     last_checked_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # Set when a pack stops citing this URL — usually because a dead link was
+    # corrected. Retired sources are never fetched again, but are NOT deleted:
+    # the snapshot is the evidence behind anything published from it, and that
+    # has to stay re-checkable by someone who does not trust us.
+    retired_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     # When this source next becomes eligible. A sweep only touches what is due,
     # so the work spreads over time instead of hitting every regulator at once.
     # NULL means "never checked" — due immediately.

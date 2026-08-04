@@ -374,23 +374,53 @@ def _record_change(
     return change
 
 
+def current_pack_urls(db: Session) -> dict[str, str]:
+    """The source URL each pack cites *now* — latest version per code.
+
+    Deliberately not every pack row. Each published version is its own row, so
+    iterating all of them re-registers the URL of every version that ever
+    existed, including ones already corrected because they were dead.
+    """
+    latest: dict[str, RegulationPack] = {}
+    for pack in db.query(RegulationPack).order_by(RegulationPack.created_at.asc()):
+        latest[pack.code] = pack  # ascending, so the last write wins
+    return {
+        code: pack.source_url for code, pack in latest.items() if pack.source_url
+    }
+
+
 def register_sources(db: Session) -> int:
-    """Register each published pack's official source URL. Safe to re-run."""
+    """Sync registered sources to what the current packs actually cite.
+
+    Adds what is missing, and RETIRES what no pack cites any more. Retiring
+    matters: a corrected dead link used to linger and be fetched forever, so the
+    watcher reported the same 404 every day about a URL nothing referenced. An
+    alert that is always wrong is one nobody reads.
+
+    Retired, never deleted — the snapshot is the evidence behind anything
+    published from that source, and it must stay re-checkable by an auditor.
+    """
+    wanted = current_pack_urls(db)
+    now = datetime.now(UTC)
     registered = 0
-    for pack in db.query(RegulationPack).all():
-        if not pack.source_url:
-            continue
-        exists = (
-            db.query(RegulationSource)
-            .filter(
-                RegulationSource.pack_code == pack.code,
-                RegulationSource.url == pack.source_url,
-            )
-            .one_or_none()
-        )
-        if exists is None:
-            db.add(RegulationSource(pack_code=pack.code, url=pack.source_url))
+
+    existing: dict[tuple[str, str], RegulationSource] = {
+        (s.pack_code, s.url): s for s in db.query(RegulationSource).all()
+    }
+
+    for code, url in wanted.items():
+        source = existing.get((code, url))
+        if source is None:
+            db.add(RegulationSource(pack_code=code, url=url))
             registered += 1
+        elif source.retired_at is not None:
+            # A pack citing this URL again brings it back, schedule and all.
+            source.retired_at = None
+
+    for (code, url), source in existing.items():
+        if wanted.get(code) != url and source.retired_at is None:
+            source.retired_at = now
+
     db.flush()
     return registered
 
@@ -615,6 +645,7 @@ def due_sources(
     cap = MAX_SOURCES_PER_RUN if limit is None else limit
     query = (
         db.query(RegulationSource)
+        .filter(RegulationSource.retired_at.is_(None))
         .filter(
             (RegulationSource.next_check_at.is_(None))
             | (RegulationSource.next_check_at <= now)
@@ -645,7 +676,10 @@ def run_watch(
     register_sources(db)
 
     now = datetime.now(UTC)
-    total = db.query(RegulationSource).count()
+    # Retired sources are excluded throughout: counting them would report a
+    # denominator the sweep will never work through.
+    live = db.query(RegulationSource).filter(RegulationSource.retired_at.is_(None))
+    total = live.count()
     sources = due_sources(db, now=now, limit=limit)
 
     all_changes: list[RegulationChange] = []
@@ -657,6 +691,7 @@ def run_watch(
     # Read AFTER the sweep, so it reflects what this run scheduled.
     soonest = (
         db.query(RegulationSource.next_check_at)
+        .filter(RegulationSource.retired_at.is_(None))
         .filter(RegulationSource.next_check_at.isnot(None))
         .order_by(RegulationSource.next_check_at.asc())
         .limit(1)
@@ -664,7 +699,7 @@ def run_watch(
     )
     still_due = sum(
         1
-        for s in db.query(RegulationSource).all()
+        for s in db.query(RegulationSource).filter(RegulationSource.retired_at.is_(None))
         if s.next_check_at is None or s.next_check_at <= now
     )
 

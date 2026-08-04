@@ -284,6 +284,8 @@ class RegulationSourceOut(BaseModel):
     content_hash: str | None = None
     last_checked_at: str | None = None
     next_check_at: str | None = None
+    # Set when no pack cites this URL any more. Kept and shown, never fetched.
+    retired_at: str | None = None
     last_status: str | None = None
     last_error: str | None = None
 

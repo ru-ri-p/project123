@@ -956,6 +956,27 @@ async function runWatch(publish) {
   b.disabled = false; b.textContent = label;
 }
 
+// The stored last_error is the exact exception, deliberately — it is what an
+// engineer needs. It is not what an operator needs at a glance, so the chip says
+// what happened and the full text sits in the tooltip.
+function stateLabel(r) {
+  if (!r.last_checked_at) return "unchecked";
+  if (r.last_status && r.last_status !== "error") {
+    const n = Number(r.last_status);
+    if (n === 200) return "200";
+    if (n === 404 || n === 410) return `HTTP ${n} · GONE?`;
+    if (n === 401 || n === 403) return `HTTP ${n} · BLOCKED`;
+    if (n === 429) return "HTTP 429 · RATE LIMITED";
+    return `HTTP ${n}`;
+  }
+  const e = (r.last_error || "").toLowerCase();
+  if (e.includes("timed out") || e.includes("timeout")) return "TIMED OUT";
+  if (e.includes("ssl") || e.includes("certificate")) return "TLS FAILED";
+  if (e.includes("name or service") || e.includes("nodename")) return "DNS FAILED";
+  if (e) return "UNREACHABLE";
+  return r.last_status || "unchecked";
+}
+
 async function loadWatchSources() {
   try {
     const rows = await api.call("/v1/admin/regulation-watch/sources");
@@ -964,15 +985,21 @@ async function loadWatchSources() {
       <tbody>${rows.map((r) => {
         const bad = r.last_error || (r.last_status && r.last_status !== "200");
         const due = !r.next_check_at || new Date(r.next_check_at) <= new Date();
-        return `<tr>
+        // A retired source is one no pack cites any more. Kept for the record,
+        // never fetched — so its old error must not read as a live problem.
+        const off = !!r.retired_at;
+        return `<tr${off ? ' style="opacity:.5;"' : ""}>
           <td class="mono" style="font-size:12px;">${esc(r.pack_code)}</td>
           <td><a href="${esc(r.url)}" target="_blank" rel="noopener"
                  style="color:var(--blue);font-size:12px;">${esc(r.url.slice(0, 64))}…</a>
               ${r.content_hash ? `<div class="hash">snapshot ${esc(r.content_hash.slice(0,16))}…</div>` : ""}</td>
           <td class="kv2 mono">${r.last_checked_at ? fmtT(r.last_checked_at) : "never"}</td>
-          <td class="kv2 mono">${due ? "due now" : fmtT(r.next_check_at)}</td>
-          <td><span class="chip ${bad ? "red" : r.last_checked_at ? "blue" : "grey"}">${
-            esc(r.last_error ? r.last_error.slice(0,40) : (r.last_status || "unchecked"))}</span></td>
+          <td class="kv2 mono">${off ? "—" : (due ? "due now" : fmtT(r.next_check_at))}</td>
+          <td>${off
+            ? '<span class="chip grey">NO LONGER CITED</span>'
+            : `<span class="chip ${bad ? "red" : r.last_checked_at ? "blue" : "grey"}"
+                     title="${esc(r.last_error || r.last_status || "")}">${
+                esc(stateLabel(r))}</span>`}</td>
         </tr>`;
       }).join("")}</tbody></table>` : '<div class="empty">No sources registered yet.</div>';
   } catch (e) { if (!handleAuthLoss(e)) toast("Sources failed: " + e.message, "err"); }
