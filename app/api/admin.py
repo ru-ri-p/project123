@@ -320,15 +320,20 @@ def reconcile_org_packs(org_id: str, db: Session = Depends(get_db)) -> dict[str,
 
 @router.post("/regulation-watch/run", response_model=WatchRunOut)
 def run_regulation_watch(
-    auto_publish: bool = True, db: Session = Depends(get_db)
+    auto_publish: bool = True, limit: int | None = None, db: Session = Depends(get_db)
 ) -> WatchRunOut:
-    """Sweep every registered official source now.
+    """Check the official sources that are due now.
 
-    Also runs on a schedule. Auto-publication is limited to claims provable
-    verbatim against the fetched official text; anything needing judgement is
-    quarantined. Pass auto_publish=false to observe without publishing.
+    Deliberately not every source every run — the work is spread over time so we
+    do not hit a regulator with a burst of requests (difc.com answered 429 to
+    exactly that). Pass limit=0 to check everything due in one go; expect it to
+    take a while, and prefer it from a scheduled job rather than a browser.
+
+    Auto-publication is limited to claims provable verbatim against the fetched
+    official text; anything needing judgement is quarantined. Pass
+    auto_publish=false to observe without publishing.
     """
-    summary = reg_watch.run_watch(db, auto_publish=auto_publish)
+    summary = reg_watch.run_watch(db, auto_publish=auto_publish, limit=limit)
     db.commit()
     return WatchRunOut(**summary)
 
@@ -341,6 +346,7 @@ def list_watch_sources(db: Session = Depends(get_db)) -> list[RegulationSourceOu
         RegulationSourceOut(
             pack_code=s.pack_code, url=s.url, content_hash=s.content_hash,
             last_checked_at=s.last_checked_at.isoformat() if s.last_checked_at else None,
+            next_check_at=s.next_check_at.isoformat() if s.next_check_at else None,
             last_status=s.last_status, last_error=s.last_error,
         )
         for s in db.query(RegulationSource).order_by(RegulationSource.pack_code).all()

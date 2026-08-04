@@ -251,3 +251,50 @@ correctly configured org that simply had not been checked yet).
 NOTE ON RATE LIMITS: difc.com returned 429 to two near-simultaneous fetches. If
 that persists, space the sweep out or cache more aggressively — worth watching.
 
+
+--------------------------------------------------------------------------------
+SESSION: 2026-08-04 (cont.) — "space the sweep out"
+--------------------------------------------------------------------------------
+Acting on the note above: difc.com's 429 was not a fluke, it was us asking two
+packs' worth of pages from one host in the same instant. Spacing now happens in
+two places, because "all at once" was true in two different ways.
+
+WITHIN A RUN
+  - HostPacer keeps a minimum gap between requests to the SAME host
+    (REGWATCH_HOST_DELAY_SECONDS, default 6). Per host, not global: the
+    constraint belongs to the site, and slowing every request to protect one
+    would make the sweep needlessly slow.
+  - build_fetcher retries 429/500/502/503/504 (REGWATCH_MAX_RETRIES, default 2),
+    honouring the host's own Retry-After, capped at 60s — a cron holding a
+    database session must not sleep for an hour. A malformed (HTTP-date)
+    Retry-After falls back to exponential backoff rather than breaking.
+  - Still HTTPS-only. Pacing did not weaken Gate 1.
+
+ACROSS RUNS  (new: regulation_sources.next_check_at, migration c7d3e4f81a25)
+  - A run checks only sources that are DUE, at most MAX_SOURCES_PER_RUN
+    (default 3). Interval REGWATCH_CHECK_INTERVAL_SECONDS, default 24h.
+  - next_check_at is booked BEFORE the fetch, so a source that fails is still
+    put to the back of the queue. A failed source that stayed due would be
+    retried on every run — the same hammering, one level up.
+  - NULL (never checked) sorts first, so a newly registered pack is picked up on
+    the very next run instead of waiting out an interval it was never part of.
+  - run_watch now returns sources_total / sources_deferred / next_due_at, and
+    both the dashboard toast and the cron log print them. "Checked 3" with no
+    denominator reads as "everything is up to date", which would be a lie.
+
+A side benefit that was really the point: "Run sweep now" no longer holds a
+database session open for minutes while it sleeps. The regwatch E2E was in fact
+failing on a 30s timeout before this — the pacing alone had made the button hang.
+
+  scripts/watch_regulations.py (cron) defaults to limit=0 = everything due,
+  since a cron has the wall clock and the per-host pacing keeps it polite.
+
+Tests: 4 new in tests/test_reg_watch.py (only-what-is-due, not-rechecked-until-
+due, a-failed-source-is-still-scheduled, never-checked-sorts-first) on top of the
+6 pacing tests. Full suite 177 passed; all 9 browser E2E suites pass; ruff clean;
+mypy at the same pre-existing 7 errors in evaluator/approvals/traces.
+
+STILL OPEN (unchanged): deploy to Render; populate provision_candidate on the
+real packs (the watcher can only confirm candidates a human wrote); legal review
+of all pack content; named user identity on both sides; notifications on access
+requests; key rotation before launch; repo consolidation.

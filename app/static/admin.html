@@ -350,6 +350,13 @@
         means is judgement, and that stays with a person.
       </div>
 
+      <div class="banner" style="margin-bottom:18px;">
+        <b>A sweep checks what is due, not everything.</b> Sources are spaced out — a minimum gap
+        between requests to the same regulator, and only a few sources per run — because asking a
+        regulator for several pages at once gets us rate-limited, and a rate limit tells us nothing
+        about the law. Each source is re-checked about once a day; NEXT DUE shows when.
+      </div>
+
       <div class="card" style="margin-bottom:14px;">
         <div class="row">
           <div class="eyebrow">SOURCES</div>
@@ -918,8 +925,12 @@ async function runWatch(publish) {
   try {
     const r = await api.call(`/v1/admin/regulation-watch/run?auto_publish=${publish}`,
                              { method: "POST" });
-    toast(`Checked ${r.sources_checked} source(s): ${r.auto_published} auto-published, `
-          + `${r.quarantined} need review.`, r.quarantined ? "err" : "ok");
+    const scope = r.sources_total
+      ? ` of ${r.sources_total}` + (r.sources_deferred ? `, ${r.sources_deferred} still due` : "")
+      : "";
+    const nxt = r.next_due_at ? ` Next due ${fmtT(r.next_due_at)}.` : "";
+    toast(`Checked ${r.sources_checked} source(s)${scope}: ${r.auto_published} auto-published, `
+          + `${r.quarantined} need review.${nxt}`, r.quarantined ? "err" : "ok");
     loadWatchSources(); loadWatchChanges();
   } catch (e) { if (!handleAuthLoss(e)) toast("Sweep failed: " + e.message, "err"); }
   b.disabled = false; b.textContent = label;
@@ -929,15 +940,17 @@ async function loadWatchSources() {
   try {
     const rows = await api.call("/v1/admin/regulation-watch/sources");
     $("#rw-sources").innerHTML = rows.length ? `<table>
-      <thead><tr><th>PACK</th><th>OFFICIAL SOURCE</th><th>LAST CHECKED</th><th>STATE</th></tr></thead>
+      <thead><tr><th>PACK</th><th>OFFICIAL SOURCE</th><th>LAST CHECKED</th><th>NEXT DUE</th><th>STATE</th></tr></thead>
       <tbody>${rows.map((r) => {
         const bad = r.last_error || (r.last_status && r.last_status !== "200");
+        const due = !r.next_check_at || new Date(r.next_check_at) <= new Date();
         return `<tr>
           <td class="mono" style="font-size:12px;">${esc(r.pack_code)}</td>
           <td><a href="${esc(r.url)}" target="_blank" rel="noopener"
                  style="color:var(--blue);font-size:12px;">${esc(r.url.slice(0, 64))}…</a>
               ${r.content_hash ? `<div class="hash">snapshot ${esc(r.content_hash.slice(0,16))}…</div>` : ""}</td>
           <td class="kv2 mono">${r.last_checked_at ? fmtT(r.last_checked_at) : "never"}</td>
+          <td class="kv2 mono">${due ? "due now" : fmtT(r.next_check_at)}</td>
           <td><span class="chip ${bad ? "red" : r.last_checked_at ? "blue" : "grey"}">${
             esc(r.last_error ? r.last_error.slice(0,40) : (r.last_status || "unchecked"))}</span></td>
         </tr>`;

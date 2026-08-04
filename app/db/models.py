@@ -379,6 +379,12 @@ class RegulationSource(Base):
     last_checked_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # When this source next becomes eligible. A sweep only touches what is due,
+    # so the work spreads over time instead of hitting every regulator at once.
+    # NULL means "never checked" — due immediately.
+    next_check_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
     last_status: Mapped[str | None] = mapped_column(Text, nullable=True)
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(

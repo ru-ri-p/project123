@@ -283,12 +283,16 @@ class RegulationSourceOut(BaseModel):
     url: str
     content_hash: str | None = None
     last_checked_at: str | None = None
+    next_check_at: str | None = None
     last_status: str | None = None
     last_error: str | None = None
 
 
 class WatchRunOut(BaseModel):
     sources_checked: int
+    sources_total: int = 0
+    sources_deferred: int = 0
+    next_due_at: str | None = None
     changes: int
     auto_published: int
     quarantined: int

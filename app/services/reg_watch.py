@@ -53,10 +53,13 @@ to, `counsel_reviewed`.
 from __future__ import annotations
 
 import hashlib
+import os
 import re
+import time
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
+from urllib.parse import urlparse
 
 from sqlalchemy.orm import Session
 
@@ -80,7 +83,88 @@ STATUS_ACTIONED = "actioned"
 # Reproducibility passes required before a claim may be published (Gate 3).
 REPRODUCIBILITY_RUNS = 3
 
+# --- politeness ---------------------------------------------------------------
+# difc.com returned 429 to two near-simultaneous fetches on the first live sweep:
+# two packs cite the same host, and we asked for both at once. The answer has two
+# halves, because "all at once" was true in two different ways.
+#
+#   WITHIN a run — a minimum gap between requests to the SAME host. Per host
+#       rather than global, because the constraint belongs to the host; slowing
+#       every request to protect one site would make the sweep needlessly slow.
+#
+#   ACROSS runs — a run only touches sources that are DUE, and at most a handful
+#       of them. Seven sources checked daily is seven requests a day; the old
+#       design delivered all seven inside one second. Spreading them also keeps
+#       the operator's "Run sweep" button responsive, since a request that holds
+#       a database session while it sleeps is its own kind of bug.
+DEFAULT_HOST_DELAY = float(os.environ.get("REGWATCH_HOST_DELAY_SECONDS", "6"))
+# How long a source stays fresh once checked. A regulator does not amend an
+# instrument hourly; daily is already far more often than the law changes.
+CHECK_INTERVAL_SECONDS = float(
+    os.environ.get("REGWATCH_CHECK_INTERVAL_SECONDS", str(24 * 60 * 60))
+)
+# Most sources one run will touch. Bounds both the politeness burst and the
+# wall-clock time an operator spends staring at a spinner.
+MAX_SOURCES_PER_RUN = int(os.environ.get("REGWATCH_MAX_SOURCES_PER_RUN", "3"))
+MAX_RETRIES = int(os.environ.get("REGWATCH_MAX_RETRIES", "2"))
+# Worth retrying: the host is asking us to wait, not telling us anything about
+# the instrument.
+RETRY_STATUSES = frozenset({429, 500, 502, 503, 504})
+# Cap on how long we will honour a Retry-After. A regulator asking for an hour
+# should end the sweep, not stall a cron job holding a database session.
+MAX_RETRY_WAIT = 60.0
+
 Fetcher = Callable[[str], tuple[int, str]]
+
+
+class HostPacer:
+    """Keeps a minimum gap between requests to the same host.
+
+    Deliberately in-process and per-sweep: it exists to stop us hammering one
+    site within a single run, which is what actually triggered the rate limit.
+    """
+
+    def __init__(
+        self,
+        delay: float = DEFAULT_HOST_DELAY,
+        *,
+        sleeper: Callable[[float], None] | None = None,
+        clock: Callable[[], float] | None = None,
+    ) -> None:
+        self.delay = max(0.0, delay)
+        self._sleep = sleeper or time.sleep
+        self._now = clock or time.monotonic
+        self._last: dict[str, float] = {}
+
+    @staticmethod
+    def host_of(url: str) -> str:
+        return urlparse(url).netloc.lower()
+
+    def wait_for(self, url: str) -> float:
+        """Sleep long enough that this host has had its breathing room."""
+        host = self.host_of(url)
+        last = self._last.get(host)
+        if last is None or self.delay <= 0:
+            return 0.0
+        gap = self.delay - (self._now() - last)
+        if gap > 0:
+            self._sleep(gap)
+            return gap
+        return 0.0
+
+    def mark(self, url: str) -> None:
+        self._last[self.host_of(url)] = self._now()
+
+
+def _retry_after_seconds(headers: dict[str, str]) -> float | None:
+    """Honour the host's own instruction when it gives one."""
+    raw = headers.get("Retry-After") or headers.get("retry-after")
+    if not raw:
+        return None
+    try:
+        return max(0.0, float(str(raw).strip()))
+    except ValueError:
+        return None  # HTTP-date form; fall back to our own backoff
 
 
 class WatchError(RuntimeError):
@@ -129,16 +213,57 @@ def content_hash(text: str) -> str:
 # --- GATE 1: provenance -------------------------------------------------------
 
 
-def default_fetcher(url: str) -> tuple[int, str]:
-    """Fetch a source. HTTPS only — a claim's provenance is worth nothing if the
-    transport could be tampered with."""
+def _http_get(url: str) -> tuple[int, str, dict[str, str]]:
     import requests
 
-    if not url.lower().startswith("https://"):
-        msg = f"refusing to fetch a regulation source over a non-HTTPS URL: {url}"
-        raise WatchError(msg)
     response = requests.get(url, timeout=30, headers={"User-Agent": "attest-regwatch/1"})
-    return response.status_code, response.text
+    return response.status_code, response.text, dict(response.headers)
+
+
+def build_fetcher(
+    *,
+    pacer: HostPacer | None = None,
+    getter: Callable[[str], tuple[int, str, dict[str, str]]] | None = None,
+    sleeper: Callable[[float], None] | None = None,
+) -> Fetcher:
+    """A fetcher that paces itself per host and retries when asked to wait.
+
+    HTTPS only — a claim's provenance is worth nothing if the transport could be
+    tampered with. A 429 or 5xx is the host asking for patience, so we give it
+    some (honouring Retry-After when offered) rather than reporting a
+    non-conclusion about the instrument.
+    """
+    pace = pacer or HostPacer()
+    fetch = getter or _http_get
+    sleep = sleeper or time.sleep
+
+    def fetcher(url: str) -> tuple[int, str]:
+        if not url.lower().startswith("https://"):
+            msg = f"refusing to fetch a regulation source over a non-HTTPS URL: {url}"
+            raise WatchError(msg)
+
+        status: int = 0
+        text: str = ""
+        headers: dict[str, str] = {}
+        for attempt in range(MAX_RETRIES + 1):
+            pace.wait_for(url)
+            status, text, headers = fetch(url)
+            pace.mark(url)
+            if status not in RETRY_STATUSES or attempt == MAX_RETRIES:
+                return status, text
+            # Exponential backoff, overridden by the host's own Retry-After.
+            wait = _retry_after_seconds(headers)
+            if wait is None:
+                wait = min(MAX_RETRY_WAIT, DEFAULT_HOST_DELAY * (2**attempt))
+            sleep(min(wait, MAX_RETRY_WAIT))
+        return status, text
+
+    return fetcher
+
+
+def default_fetcher(url: str) -> tuple[int, str]:
+    """Single-shot fetch with pacing and retries. Kept for direct callers."""
+    return build_fetcher()(url)
 
 
 def registered_urls(db: Session, pack_code: str) -> set[str]:
@@ -276,6 +401,11 @@ def check_source(
     """Fetch one source, detect drift, and confirm what can be proven."""
     changes: list[RegulationChange] = []
     now = datetime.now(UTC)
+    # Booked BEFORE the fetch, so every exit path — success, HTTP error, blocked
+    # socket, unhandled exception — leaves the source scheduled. A source that
+    # failed and stayed due would be retried on every run, which is precisely the
+    # hammering this is meant to stop.
+    source.next_check_at = now + timedelta(seconds=CHECK_INTERVAL_SECONDS)
 
     try:
         status_code, text = fetcher(source.url)
@@ -472,24 +602,81 @@ def _publish_confirmations(
     return version
 
 
+def due_sources(
+    db: Session, *, now: datetime | None = None, limit: int | None = None
+) -> list[RegulationSource]:
+    """Sources eligible for checking now, longest-overdue first.
+
+    A never-checked source (NULL) sorts first, so a freshly registered pack is
+    picked up on the very next run rather than waiting out an interval it was
+    never part of.
+    """
+    now = now or datetime.now(UTC)
+    cap = MAX_SOURCES_PER_RUN if limit is None else limit
+    query = (
+        db.query(RegulationSource)
+        .filter(
+            (RegulationSource.next_check_at.is_(None))
+            | (RegulationSource.next_check_at <= now)
+        )
+        .order_by(RegulationSource.next_check_at.asc().nullsfirst(),
+                  RegulationSource.created_at.asc())
+    )
+    if cap > 0:
+        query = query.limit(cap)
+    return list(query)
+
+
 def run_watch(
-    db: Session, *, fetcher: Fetcher | None = None, auto_publish: bool = True
+    db: Session,
+    *,
+    fetcher: Fetcher | None = None,
+    auto_publish: bool = True,
+    limit: int | None = None,
 ) -> dict[str, Any]:
-    """Sweep every registered source. Returns a summary for the dashboard."""
-    fetch = fetcher or default_fetcher
+    """Check the sources that are due. Returns a summary for the dashboard.
+
+    Not every source, every run: see the politeness note at the top of the file.
+    `limit=0` means no cap, for a scheduled job that can afford the wall clock.
+    """
+    # One pacer for the whole sweep: two packs citing the same host must be
+    # spaced apart from each other, which a per-call pacer could not do.
+    fetch = fetcher or build_fetcher()
     register_sources(db)
 
+    now = datetime.now(UTC)
+    total = db.query(RegulationSource).count()
+    sources = due_sources(db, now=now, limit=limit)
+
     all_changes: list[RegulationChange] = []
-    sources = db.query(RegulationSource).all()
     for source in sources:
         all_changes.extend(
             check_source(db, source, fetcher=fetch, auto_publish=auto_publish)
         )
 
+    # Read AFTER the sweep, so it reflects what this run scheduled.
+    soonest = (
+        db.query(RegulationSource.next_check_at)
+        .filter(RegulationSource.next_check_at.isnot(None))
+        .order_by(RegulationSource.next_check_at.asc())
+        .limit(1)
+        .scalar()
+    )
+    still_due = sum(
+        1
+        for s in db.query(RegulationSource).all()
+        if s.next_check_at is None or s.next_check_at <= now
+    )
+
     return {
         "sources_checked": len(sources),
+        "sources_total": total,
+        # Honest about what this run left alone — a summary that says "3 checked"
+        # with no denominator reads as "everything is up to date".
+        "sources_deferred": still_due,
+        "next_due_at": soonest.isoformat() if soonest else None,
         "changes": len(all_changes),
         "auto_published": sum(1 for c in all_changes if c.status == STATUS_AUTO_PUBLISHED),
         "quarantined": sum(1 for c in all_changes if c.status == STATUS_QUARANTINED),
-        "checked_at": datetime.now(UTC).isoformat(),
+        "checked_at": now.isoformat(),
     }

@@ -66,6 +66,32 @@ That last duty — retained evidence that the obligations were met — is precis
 what Attest produces. It is the closest thing in the region to an AI-governance
 rulebook, and the strongest reason to lead with DIFC.
 
+## How the watcher paces itself
+
+The first live sweep asked every registered source for its page at once. Two
+packs cite `difc.com`, and difc.com answered **HTTP 429**. A rate limit tells us
+nothing about the law, so the fix was to stop provoking one.
+
+Spacing happens in two places, because "all at once" was true in two ways:
+
+| Where | What | Env var (default) |
+|---|---|---|
+| Within a run | Minimum gap between requests to the **same host**. Per host, not global — the constraint belongs to the site. | `REGWATCH_HOST_DELAY_SECONDS` (6) |
+| Within a run | Retry on 429/5xx, honouring `Retry-After`, capped so a cron never sleeps for an hour | `REGWATCH_MAX_RETRIES` (2) |
+| Across runs | A run only checks sources that are **due**, and at most a few | `REGWATCH_MAX_SOURCES_PER_RUN` (3) |
+| Across runs | How long a source stays fresh once checked | `REGWATCH_CHECK_INTERVAL_SECONDS` (86400) |
+
+A source is scheduled **before** its fetch, so a source that fails — blocked,
+gone, unreachable — is still put to the back of the queue rather than retried on
+every run. A never-checked source sorts first, so a newly registered pack is
+picked up on the very next run instead of waiting out an interval it was never
+part of.
+
+The dashboard's *Run sweep now* therefore checks a handful of due sources, not
+everything, and says so: "Checked 3 of 8 source(s)… 5 still due. Next due …".
+The scheduled job (`scripts/watch_regulations.py`) defaults to no cap, since a
+cron has the wall clock to spare and the per-host pacing keeps it polite anyway.
+
 ## How to promote a pack
 
 1. Obtain the official text from the source URL recorded on the pack.

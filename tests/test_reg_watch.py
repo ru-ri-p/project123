@@ -319,3 +319,211 @@ def test_already_confirmed_provisions_are_not_overwritten(db) -> None:
     pack = db.query(reg_watch.RegulationPack).filter(
         reg_watch.RegulationPack.code == code).first()
     assert reg_watch.extract_confirmations(pack, OFFICIAL_TEXT) == {}
+
+
+# --- politeness: what the first live sweep's 429s prompted --------------------
+
+
+def test_requests_to_the_same_host_are_spaced_apart() -> None:
+    """Two packs cite difc.com. Asking for both at once is what earned the 429."""
+    from app.services.reg_watch import HostPacer
+
+    slept: list[float] = []
+    now = {"t": 0.0}
+    pacer = HostPacer(delay=6.0, sleeper=slept.append, clock=lambda: now["t"])
+
+    pacer.mark("https://www.difc.com/a")
+    waited = pacer.wait_for("https://www.difc.com/b")
+    assert waited == 6.0 and slept == [6.0], "the second same-host fetch waits"
+
+    # A DIFFERENT host is not made to wait for an unrelated site's limit.
+    slept.clear()
+    assert pacer.wait_for("https://u.ae/x") == 0.0
+    assert slept == []
+
+    # And once enough time has passed, no wait at all.
+    now["t"] = 100.0
+    slept.clear()
+    assert pacer.wait_for("https://www.difc.com/c") == 0.0
+    assert slept == []
+
+
+def test_a_429_is_retried_and_can_then_succeed() -> None:
+    """The host asked us to wait, not told us the instrument is gone."""
+    from app.services.reg_watch import HostPacer, build_fetcher
+
+    calls: list[str] = []
+    responses = [
+        (429, "", {"Retry-After": "2"}),
+        (200, "<html>Article 26</html>", {}),
+    ]
+
+    def getter(url: str):
+        calls.append(url)
+        return responses[min(len(calls) - 1, len(responses) - 1)]
+
+    slept: list[float] = []
+    fetcher = build_fetcher(
+        pacer=HostPacer(delay=0, sleeper=slept.append, clock=lambda: 0.0),
+        getter=getter,
+        sleeper=slept.append,
+    )
+    status, text = fetcher("https://www.difc.com/x")
+    assert (status, len(calls)) == (200, 2), "retried once, then succeeded"
+    assert 2.0 in slept, "the host's own Retry-After was honoured"
+
+
+def test_retries_are_bounded_and_the_last_status_is_reported() -> None:
+    """A persistently rate-limited host must not loop forever, and must still be
+    reported honestly as transient rather than as a withdrawn instrument."""
+    from app.services.reg_watch import (
+        CHANGE_SOURCE_UNAVAILABLE,
+        MAX_RETRIES,
+        HostPacer,
+        build_fetcher,
+    )
+
+    calls: list[str] = []
+
+    def always_429(url: str):
+        calls.append(url)
+        return 429, "", {}
+
+    fetcher = build_fetcher(
+        pacer=HostPacer(delay=0, sleeper=lambda _: None, clock=lambda: 0.0),
+        getter=always_429,
+        sleeper=lambda _: None,
+    )
+    status, _ = fetcher("https://www.difc.com/x")
+    assert status == 429
+    assert len(calls) == MAX_RETRIES + 1, "bounded attempts, no infinite retry"
+    assert CHANGE_SOURCE_UNAVAILABLE  # classified as transient, not source_gone
+
+
+def test_an_absurd_retry_after_does_not_stall_the_sweep() -> None:
+    """A cron holding a database session must not sleep for an hour."""
+    from app.services.reg_watch import MAX_RETRY_WAIT, HostPacer, build_fetcher
+
+    slept: list[float] = []
+    fetcher = build_fetcher(
+        pacer=HostPacer(delay=0, sleeper=lambda _: None, clock=lambda: 0.0),
+        getter=lambda url: (429, "", {"Retry-After": "3600"}),
+        sleeper=slept.append,
+    )
+    fetcher("https://www.difc.com/x")
+    assert slept and max(slept) <= MAX_RETRY_WAIT
+
+
+def test_a_malformed_retry_after_falls_back_to_our_own_backoff() -> None:
+    from app.services.reg_watch import HostPacer, build_fetcher
+
+    slept: list[float] = []
+    fetcher = build_fetcher(
+        pacer=HostPacer(delay=0, sleeper=lambda _: None, clock=lambda: 0.0),
+        getter=lambda url: (429, "", {"Retry-After": "Wed, 21 Oct 2026 07:28:00 GMT"}),
+        sleeper=slept.append,
+    )
+    fetcher("https://www.difc.com/x")
+    assert slept and all(v > 0 for v in slept), "HTTP-date form must not break pacing"
+
+
+def test_pacing_still_refuses_non_https() -> None:
+    from app.services.reg_watch import WatchError, build_fetcher
+
+    fetcher = build_fetcher(getter=lambda url: (200, "", {}), sleeper=lambda _: None)
+    with pytest.raises(WatchError):
+        fetcher("http://www.difc.com/x")
+
+
+# --- spreading the sweep across runs ------------------------------------------
+
+
+def test_a_sweep_only_touches_the_sources_that_are_due(db) -> None:
+    """The burst that earned the 429 was every source in one run. Cap it."""
+    from app.services import reg_watch
+
+    for _ in range(4):
+        _pack(db)
+    fetched: list[str] = []
+
+    def fetcher(url: str):
+        fetched.append(url)
+        return 200, OFFICIAL_TEXT
+
+    summary = reg_watch.run_watch(db, fetcher=fetcher, auto_publish=False, limit=2)
+    assert len(fetched) == 2, "the run is bounded, whatever the backlog"
+    assert summary["sources_checked"] == 2
+    assert summary["sources_total"] > 2
+    assert summary["sources_deferred"] > 0, "and it says so, rather than implying it is done"
+    assert summary["next_due_at"], "the operator is told when the rest happens"
+
+
+def test_a_checked_source_is_not_rechecked_until_it_is_due(db) -> None:
+    """Otherwise every run hammers the same host — the original bug, per-run."""
+    from datetime import UTC, datetime
+
+    from app.services import reg_watch
+
+    pack = _pack(db)
+    reg_watch.register_sources(db)
+    source = next(
+        s for s in db.query(reg_watch.RegulationSource).all() if s.pack_code == pack.code
+    )
+    reg_watch.check_source(db, source, fetcher=_fetcher(OFFICIAL_TEXT), auto_publish=False)
+    db.flush()
+
+    assert source.next_check_at is not None
+    assert source.next_check_at > datetime.now(UTC)
+    due = reg_watch.due_sources(db, limit=0)
+    assert source.id not in {s.id for s in due}, "freshly checked, so not due"
+
+
+def test_a_source_that_failed_is_still_scheduled(db) -> None:
+    """A source that stayed due after failing would be retried on every single
+    run — which is exactly the hammering the pacing exists to prevent."""
+    from app.services import reg_watch
+
+    pack = _pack(db)
+    reg_watch.register_sources(db)
+    source = next(
+        s for s in db.query(reg_watch.RegulationSource).all() if s.pack_code == pack.code
+    )
+
+    def explode(url: str):
+        raise ConnectionError("egress blocked")
+
+    changes = reg_watch.check_source(db, source, fetcher=explode, auto_publish=False)
+    db.flush()
+    assert changes and changes[0].change_type == reg_watch.CHANGE_FETCH_FAILED
+    assert source.next_check_at is not None, "a dead source must not be retried in a loop"
+    assert source.id not in {s.id for s in reg_watch.due_sources(db, limit=0)}
+
+
+def test_a_never_checked_source_is_picked_up_first(db) -> None:
+    """A newly registered pack must not wait out an interval it was never in."""
+    from datetime import UTC, datetime, timedelta
+
+    from app.services import reg_watch
+
+    fresh = _pack(db)     # checked a moment ago — not due
+    overdue = _pack(db)   # was due an hour ago
+    new = _pack(db)       # never checked, and the youngest of the three
+    reg_watch.register_sources(db)
+    ours = {
+        s.pack_code: s
+        for s in db.query(reg_watch.RegulationSource).filter(
+            reg_watch.RegulationSource.pack_code.in_([fresh.code, overdue.code, new.code])
+        )
+    }
+    now = datetime.now(UTC)
+    ours[fresh.code].next_check_at = now + timedelta(hours=12)
+    ours[overdue.code].next_check_at = now - timedelta(hours=1)
+    db.flush()
+
+    ordered = [s.pack_code for s in reg_watch.due_sources(db, limit=0)]
+    assert new.code in ordered, "a never-checked source is due immediately"
+    assert fresh.code not in ordered, "a freshly checked one waits its turn"
+    assert ordered.index(new.code) < ordered.index(overdue.code), (
+        "and it sorts ahead of merely overdue sources, so a new pack is never starved"
+    )
+
