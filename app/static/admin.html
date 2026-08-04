@@ -284,9 +284,11 @@
       <div class="sub">Customers of record ·
         <button class="btn" id="btn-orgs" style="padding:4px 12px;">Refresh</button></div>
       <div class="card" style="margin-bottom:14px;">
+        <input class="field" id="orgsearch" placeholder="Search by name or id — e.g. tradeeasy"
+               style="margin-bottom:10px;">
         <table>
-          <thead><tr><th>ORGANISATION</th><th>MODE</th><th>CREATED</th><th>ONBOARDING</th><th></th></tr></thead>
-          <tbody id="orgrows"><tr><td colspan="4" class="empty">Connect, then refresh.</td></tr></tbody>
+          <thead><tr><th>ORGANISATION</th><th>MODE</th><th>CREATED</th><th>ONBOARDING</th><th>PROFILE</th><th></th></tr></thead>
+          <tbody id="orgrows"><tr><td colspan="6" class="empty">Connect, then refresh.</td></tr></tbody>
         </table>
         <div id="keybanner-slot"></div>
       </div>
@@ -753,10 +755,18 @@ function resetFile() {
 
 /* ---------- organisations ---------- */
 $("#btn-orgs").addEventListener("click", loadOrgs);
+// The list is newest-first and bounded, so an established customer is not on
+// page one. Without search you cannot reach the row you actually came for.
+let orgSearchTimer = null;
+$("#orgsearch").addEventListener("input", () => {
+  clearTimeout(orgSearchTimer);
+  orgSearchTimer = setTimeout(loadOrgs, 250);
+});
 let orgsCache = [];
 async function loadOrgs() {
   try {
-    const orgs = await api.call("/v1/admin/orgs");
+    const q = $("#orgsearch").value.trim();
+    const orgs = await api.call("/v1/admin/orgs" + (q ? `?q=${encodeURIComponent(q)}` : ""));
     orgsCache = orgs;
     loadFileOrgs(orgs);
     $("#orgrows").innerHTML = orgs.length ? orgs.map((o) => `
@@ -766,17 +776,27 @@ async function loadOrgs() {
         <td><span class="chip ${o.confidentiality_mode === "customer_key" ? "blue" : "grey"}">${o.confidentiality_mode === "customer_key" ? "CUSTOMER-HELD KEYS" : "ATTEST-MANAGED"}</span></td>
         <td class="mono" style="font-size:12px;color:var(--mut);">${esc(o.created_at.slice(0,10))}</td>
         <td><span class="chip ${o.requires_profile ? "blue" : "amber"}" style="font-size:9.5px;">${o.requires_profile ? "ONBOARDING REQUIRED" : "GRANDFATHERED"}</span></td>
+        <td><span class="chip ${o.profile_configured ? "blue" : "red"}" style="font-size:9.5px;">${o.profile_configured ? "PROFILE SET" : "NO PROFILE"}</span>
+            ${o.profile_configured ? `<div class="kv2" style="font-size:11px;margin-top:3px;">${esc((o.jurisdictions||[]).join(", ").toUpperCase())} · ${(o.sectors||[]).length} sector(s)</div>` : ""}</td>
         <td style="text-align:right;white-space:nowrap;">
           <button class="btn" data-gate="${esc(o.id)}" data-on="${o.requires_profile ? "1" : "0"}"
+            data-hasprofile="${o.profile_configured ? "1" : "0"}"
             style="padding:5px 10px;font-size:12px;">${o.requires_profile ? "Un-gate" : "Require onboarding"}</button>
           <button class="btn danger" data-rotate="${esc(o.id)}" style="padding:5px 12px;font-size:12px;">Rotate key</button></td>
-      </tr>`).join("") : '<tr><td colspan="4" class="empty">No organisations.</td></tr>';
+      </tr>`).join("") : '<tr><td colspan="6" class="empty">No organisations.</td></tr>';
     document.querySelectorAll("[data-gate]").forEach((b) => b.addEventListener("click", async () => {
       const on = b.dataset.on === "1";
       const org = b.dataset.gate;
+      const hasProfile = b.dataset.hasprofile === "1";
+      // Gating an org that has no profile stops their recording the moment you
+      // click. Say so plainly rather than letting the operator find out from the
+      // customer.
       const msg = on
         ? `Stop requiring onboarding for ${org}? They will be able to record without declaring a profile.`
-        : `Require onboarding for ${org}? They will NOT be able to record until they declare a profile — agree it with them first.`;
+        : hasProfile
+          ? `Require onboarding for ${org}? They have already declared a profile, so this locks it in and nothing breaks.`
+          : `WARNING — ${org} has NO PROFILE. Requiring onboarding will STOP their recording immediately, `
+            + `until they complete Settings in the console. Agree it with them first. Continue?`;
       if (!confirm(msg)) return;
       try {
         await api.call(`/v1/admin/orgs/${encodeURIComponent(org)}/require-onboarding?required=${!on}`,

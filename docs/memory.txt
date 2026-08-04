@@ -298,3 +298,48 @@ STILL OPEN (unchanged): deploy to Render; populate provision_candidate on the
 real packs (the watcher can only confirm candidates a human wrote); legal review
 of all pack content; named user identity on both sides; notifications on access
 requests; key rotation before launch; repo consolidation.
+
+--------------------------------------------------------------------------------
+SESSION: 2026-08-04 (cont.) — resuming the TradeEasy pilot
+--------------------------------------------------------------------------------
+Founder deployed the pacing work manually and chose "resume the TradeEasy pilot"
+as the next build. Cannot verify the live service from this environment — the
+proxy 403s CONNECT to onrender.com, same as it blocks the regulator sites — so
+deploy verification is a founder step, written down in docs/PILOT_TURN_ON.md.
+
+TWO GAPS FOUND WHILE WRITING THE RUNBOOK, BOTH FIXED
+  1. There was no way to see whether a customer had declared a profile. That
+     matters because flipping "Require onboarding" for an org with no profile
+     STOPS their recording on the spot — and TradeEasy is already integrated, so
+     doing it in the wrong order would break a working integration. AdminOrgOut
+     now carries profile_configured / jurisdictions / sectors (batch-loaded, one
+     query for the whole list, not one per row), the Organisations table has a
+     PROFILE column, and the confirm dialog warns explicitly when the org has
+     none.
+  2. The Organisations table had no search. It is newest-first and bounded at
+     100, so with 700+ test orgs an established customer like TradeEasy is not
+     on page one — the runbook step "find their row" was impossible as written.
+     Added a debounced search box wired to the ?q= the API already supported.
+
+DOCS
+  - docs/TRADEEASY_QUICKSTART.md REWRITTEN and is now the single forwardable
+    customer document. The old one predated everything: it still taught
+    new_trace + record_event + manual seq. Now: console onboarding, ONE gate()
+    call, how to read the verdict, outage behaviour, consent/decline, and an
+    explicit statement that packs are unverified and Attest never proves an
+    output lawful.
+  - docs/PILOT_TURN_ON.md NEW, ops-side, not for forwarding. Deploy probe
+    (next_check_at present = new code; 500 = migration did not run), the sweep
+    check, and the ORDER OF OPERATIONS: send quickstart -> they onboard ->
+    verify profile_configured -> only THEN flip the gate. Rollback is the same
+    call with required=false.
+
+TESTS: +1 unit (ops can see a profile before gating an org), +1 browser suite
+(scripts/orgprofile_e2e.py). 178 passed; all TEN E2E suites pass; ruff clean;
+mypy at the same pre-existing 7.
+
+NOTE FOR NEXT SESSION: the watcher still cannot auto-publish anything, because
+no real pack carries a provision_candidate. Expect auto_published:0 on every
+sweep and do not read it as a fault — today it is a drift-and-dead-link
+detector. Filling that in needs the official texts, which this environment
+cannot reach.

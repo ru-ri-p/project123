@@ -21,6 +21,7 @@ from app.db.models import (
     AccessRequest,
     Event,
     Org,
+    OrgProfile,
     RegulationChange,
     RegulationPack,
     RegulationSource,
@@ -152,7 +153,11 @@ def stats(db: Session = Depends(get_db)) -> AdminStatsOut:
 # --- Orgs ---------------------------------------------------------------------
 
 
-def _org_out(org: Org) -> AdminOrgOut:
+def _org_out(org: Org, profile: OrgProfile | None = None) -> AdminOrgOut:
+    # Switching the onboarding gate on for a customer who has not declared a
+    # profile stops their recording, so the operator has to be able to see the
+    # profile before deciding. Passed in rather than looked up, so listing many
+    # orgs stays one query rather than one per row.
     return AdminOrgOut(
         id=org.id,
         name=org.name,
@@ -161,6 +166,9 @@ def _org_out(org: Org) -> AdminOrgOut:
         fail_mode=org.fail_mode,
         created_at=org.created_at.isoformat(),
         requires_profile=org.requires_profile,
+        profile_configured=bool(profile and profile.jurisdictions and profile.sectors),
+        jurisdictions=list(profile.jurisdictions or []) if profile else [],
+        sectors=list(profile.sectors or []) if profile else [],
     )
 
 
@@ -178,7 +186,11 @@ def list_orgs(
         needle = f"%{q.strip()}%"
         query = query.filter(Org.id.ilike(needle) | Org.name.ilike(needle))
     orgs = query.order_by(Org.created_at.desc()).limit(max(1, min(limit, 500))).all()
-    return [_org_out(o) for o in orgs]
+    profiles = {
+        p.org_id: p
+        for p in db.query(OrgProfile).filter(OrgProfile.org_id.in_([o.id for o in orgs]))
+    } if orgs else {}
+    return [_org_out(o, profiles.get(o.id)) for o in orgs]
 
 
 @router.post("/orgs", response_model=AdminOrgKeyOut)
@@ -221,7 +233,7 @@ def set_require_onboarding(
         raise HTTPException(status_code=404, detail="org not found")
     org.requires_profile = required
     db.commit()
-    return _org_out(org)
+    return _org_out(org, profile_service.get_profile(db, org.id))
 
 
 # --- Regulation packs ---------------------------------------------------------

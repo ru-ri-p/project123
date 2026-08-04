@@ -129,3 +129,41 @@ def test_admin_dashboard_served_and_self_contained(client) -> None:
         assert marker not in res.text
     # The regulatory type system is embedded, not fetched.
     assert "Fraunces" in res.text and "data:font/woff2;base64," in res.text
+
+
+def test_ops_can_see_a_profile_before_gating_an_org(client) -> None:
+    """Switching the onboarding gate on for an org with no profile STOPS their
+    recording. The operator must be able to see that before clicking, so the
+    org list has to report it."""
+    org_id = f"org_prof_{uuid.uuid4().hex[:10]}"
+    key = client.post(
+        "/v1/admin/orgs", headers=A, json={"org_id": org_id, "name": "Profile Vis"}
+    ).json()["api_key"]
+
+    def listed():
+        rows = client.get(f"/v1/admin/orgs?q={org_id}", headers=A).json()
+        return next(o for o in rows if o["id"] == org_id)
+
+    before = listed()
+    assert before["profile_configured"] is False, "a new org has declared nothing"
+    assert before["jurisdictions"] == [] and before["sectors"] == []
+
+    client.put(
+        "/v1/policies/profile",
+        headers={"x-api-key": key},
+        json={"jurisdictions": ["difc"], "sectors": ["capital_markets"]},
+    )
+
+    after = listed()
+    assert after["profile_configured"] is True
+    assert after["jurisdictions"] == ["difc"]
+    assert after["sectors"] == ["capital_markets"]
+
+    # And the gate toggle reports the same thing back, so the row that renders
+    # after the click is not stale.
+    gated = client.post(
+        f"/v1/admin/orgs/{org_id}/require-onboarding?required=true", headers=A
+    ).json()
+    assert gated["requires_profile"] is True
+    assert gated["profile_configured"] is True
+    assert "api_key_hash" not in gated

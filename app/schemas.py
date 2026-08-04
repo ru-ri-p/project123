@@ -484,6 +484,10 @@ class AdminOrgOut(BaseModel):
     fail_mode: str
     created_at: str
     requires_profile: bool = False
+    # What the customer declared, so the gate is never switched on blind.
+    profile_configured: bool = False
+    jurisdictions: list[str] = Field(default_factory=list)
+    sectors: list[str] = Field(default_factory=list)
 
 
 class AdminOrgCreateIn(BaseModel):
