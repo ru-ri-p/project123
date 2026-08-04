@@ -132,6 +132,58 @@
     </div>
   </div>
 
+  <div class="main" id="onboarding" style="display:none;">
+    <h1>Welcome to Attest</h1>
+    <div class="sub">Two steps before your first AI output can be recorded.</div>
+    <div class="banner amber" style="margin-bottom:18px;">
+      Attest checks every AI output against the regulations that apply to you — so we need to know
+      who you are before anything is recorded. This takes about a minute, and it means your very
+      first record was already measured against the right rules.
+    </div>
+
+    <div class="card" style="margin-bottom:14px;">
+      <div class="row">
+        <span class="chip blue" id="ob-step1-chip">STEP 1</span>
+        <div style="flex:1;">
+          <div style="font-family:Fraunces,serif;font-size:17px;font-weight:600;">
+            Where you are licensed, and what you do</div>
+          <div class="kv2">Your obligations are derived from this. You cannot pick and choose
+            among the resulting rulebooks.</div>
+        </div>
+      </div>
+      <div style="margin-top:14px;">
+        <div class="eyebrow" style="margin-bottom:8px;">JURISDICTIONS</div>
+        <div id="ob-jurisdictions"></div>
+        <div class="eyebrow" style="margin:14px 0 8px;">SECTORS</div>
+        <div id="ob-sectors" style="max-height:340px;overflow-y:auto;border:1px solid var(--line2);
+             border-radius:6px;padding:10px;"></div>
+        <button class="btn primary" id="ob-save-profile" style="margin-top:12px;">
+          Save and continue</button>
+        <span class="kv2" id="ob-status" style="margin-left:10px;"></span>
+      </div>
+    </div>
+
+    <div class="card" id="ob-step2" style="opacity:.45;pointer-events:none;">
+      <div class="row">
+        <span class="chip grey" id="ob-step2-chip">STEP 2</span>
+        <div style="flex:1;">
+          <div style="font-family:Fraunces,serif;font-size:17px;font-weight:600;">
+            Your own policy</div>
+          <div class="kv2">Attest enforces your rules. Start from a small scaffold and edit it
+            later — only your own policy can block an output.</div>
+        </div>
+      </div>
+      <button class="btn primary" id="ob-create-policy" style="margin-top:12px;">
+        Create starter policy</button>
+    </div>
+
+    <div class="card" id="ob-done" style="display:none;border-color:var(--blue2);">
+      <div class="statline"><span class="sdot"></span><b>Setup complete</b></div>
+      <div class="kv">You can now record AI outputs. Your rulebooks are listed under Compliance.</div>
+      <button class="btn primary" id="ob-finish" style="margin-top:12px;">Go to dashboard</button>
+    </div>
+  </div>
+
   <div class="main" id="appui">
     <!-- ==================== OVERVIEW ==================== -->
     <section class="screen on" id="scr-overview">
@@ -461,7 +513,7 @@ async function connect() {
     $("#orgbadge").innerHTML = `<b>${esc(ov.name)}</b><br><span class="mono" style="font-size:11px;color:var(--faint);">${esc(ov.org_id)}</span>`;
     $("#connstate").textContent = "Connected.";
     $("#keyform").style.display = "none";
-    renderOverview(ov); loadRequests(); loadTraces(); renderCustody(ov); loadCompliance(); loadSettings();
+    renderOverview(ov); loadRequests(); loadTraces(); renderCustody(ov); loadCompliance(); loadSettings(); maybeOnboard();
     toast("Connected as " + ov.name, "ok");
   } catch (e) {
     $("#connstate").textContent = "Connection failed.";
@@ -917,6 +969,102 @@ $("#btn-save-policy").addEventListener("click", async () => {
     toast(`Policy ${p.version} published and active.`, "ok");
     loadSummary();
   } catch (e) { toast("Publish failed: " + e.message, "err"); }
+});
+
+/* ---------- first-run onboarding ---------- */
+// Shown until the profile is declared. Everything a first-time customer must do
+// before their first record, in the order it has to happen.
+let obState = { jurisdictions: new Set(), sectors: new Set(), profileDone: false };
+
+function showOnboarding(show) {
+  $("#onboarding").style.display = show ? "block" : "none";
+  $("#appui").style.display = show ? "none" : "block";
+  document.querySelector("nav.screens").style.display = show ? "none" : "flex";
+}
+
+async function maybeOnboard() {
+  try {
+    const [profile, ov] = await Promise.all([
+      api.call("/v1/policies/profile"),
+      api.call("/v1/org/overview"),
+    ]);
+    // Grandfathered orgs (predating the gate) can still record, so they get the
+    // normal dashboard with a prompt rather than being trapped in the wizard.
+    if (profile.configured || !ov.requires_profile) { showOnboarding(false); return false; }
+    const tax = await api.call("/v1/policies/sectors");
+    renderOnboarding(tax.groups);
+    showOnboarding(true);
+    return true;
+  } catch (e) { showOnboarding(false); return false; }
+}
+
+function renderOnboarding(groups) {
+  $("#ob-jurisdictions").innerHTML = JURISDICTION_CHOICES.map(([code, name, regs]) => `
+    <div class="rec ${obState.jurisdictions.has(code) ? "on" : ""}" data-obj="${code}">
+      <span class="box">${obState.jurisdictions.has(code) ? "✓" : ""}</span>
+      <div style="flex:1;"><div style="font-weight:600;font-size:13.5px;">${esc(name)}</div>
+        <div class="kv2">${esc(regs)}</div></div>
+    </div>`).join("");
+  $("#ob-sectors").innerHTML = groups.map((g) => `
+    <div style="margin-bottom:10px;">
+      <div class="eyebrow" style="margin-bottom:4px;">${esc(g.group).toUpperCase()}</div>
+      ${g.sectors.map((sx) => `
+        <div class="rec ${obState.sectors.has(sx.code) ? "on" : ""}" data-obs="${esc(sx.code)}">
+          <span class="box">${obState.sectors.has(sx.code) ? "✓" : ""}</span>
+          <div style="flex:1;min-width:0;">
+            <div style="font-weight:600;font-size:13px;">${esc(sx.name)}</div>
+            <div class="kv2">${esc(sx.description)}</div></div>
+        </div>`).join("")}
+    </div>`).join("");
+
+  document.querySelectorAll("[data-obj]").forEach((el) => el.addEventListener("click", () => {
+    const c = el.dataset.obj;
+    obState.jurisdictions.has(c) ? obState.jurisdictions.delete(c) : obState.jurisdictions.add(c);
+    renderOnboarding(groups);
+  }));
+  document.querySelectorAll("[data-obs]").forEach((el) => el.addEventListener("click", () => {
+    const c = el.dataset.obs;
+    obState.sectors.has(c) ? obState.sectors.delete(c) : obState.sectors.add(c);
+    renderOnboarding(groups);
+  }));
+}
+
+$("#ob-save-profile").addEventListener("click", async () => {
+  if (!obState.jurisdictions.size || !obState.sectors.size) {
+    toast("Select at least one jurisdiction and one sector.", "err"); return;
+  }
+  try {
+    const out = await api.call("/v1/policies/profile", { method: "PUT", body: {
+      jurisdictions: [...obState.jurisdictions], sectors: [...obState.sectors],
+      updated_by: "onboarding" } });
+    obState.profileDone = true;
+    $("#ob-status").textContent =
+      out.profile.mandatory_pack_codes.length + " rulebook(s) now apply to you.";
+    $("#ob-step1-chip").className = "chip blue";
+    $("#ob-step1-chip").textContent = "DONE";
+    const step2 = $("#ob-step2");
+    step2.style.opacity = "1"; step2.style.pointerEvents = "auto";
+    $("#ob-step2-chip").className = "chip amber";
+    toast("Profile saved. " + out.message, "ok");
+  } catch (e) { toast("Could not save: " + e.message, "err"); }
+});
+
+$("#ob-create-policy").addEventListener("click", async () => {
+  try {
+    await api.call("/v1/policies/internal", { method: "PUT", body: {
+      name: "Internal AI policy", version: "v1", rules: STARTER_POLICY, activate: true } });
+    $("#ob-step2-chip").className = "chip blue";
+    $("#ob-step2-chip").textContent = "DONE";
+    $("#ob-done").style.display = "block";
+    toast("Starter policy published. Setup complete.", "ok");
+  } catch (e) { toast("Could not publish: " + e.message, "err"); }
+});
+
+$("#ob-finish").addEventListener("click", async () => {
+  showOnboarding(false);
+  const ov = await api.call("/v1/org/overview");
+  renderOverview(ov); renderCustody(ov);
+  loadCompliance(); loadSettings(); loadRequests(); loadTraces();
 });
 
 /* ---------- settings: jurisdictions x sectors ---------- */

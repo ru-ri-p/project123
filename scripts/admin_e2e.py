@@ -37,6 +37,9 @@ def main() -> None:
                 json={"org_id": org_id, "name": "Admin E2E"}).json()["api_key"]
     )
 
+    rq.put(f"{BASE}/v1/policies/profile", headers={"x-api-key": api_key},
+           json={"jurisdictions": ["difc"], "sectors": ["capital_markets"]})
+
     with sync_playwright() as pw:
         browser = pw.chromium.launch(executable_path="/opt/pw-browsers/chromium")
         admin = browser.new_page()
@@ -78,15 +81,19 @@ def main() -> None:
 
         # --- Admin: File a Request flow ---------------------------------------
         admin.click('nav.screens button[data-k="file"]')
-        admin.wait_for_selector(f'button[data-org="{org_id}"]', timeout=5000)
+        # The org list grows with every run, so wait for OUR button, confirm the
+        # selection actually took, and allow for a slower render.
+        admin.wait_for_selector(f'button[data-org="{org_id}"]', timeout=15000)
         admin.click(f'button[data-org="{org_id}"]')
+        admin.wait_for_selector(f'button[data-org="{org_id}"].on', timeout=10000)
         admin.fill("#file-trace", trace)
         admin.click("#btn-fetch")
-        admin.wait_for_selector("[data-rec]", timeout=5000)
+        admin.wait_for_selector("[data-rec]", timeout=15000)
         boxes = admin.query_selector_all("#file-records [data-rec]")
         ok(len(boxes) == 2, "admin: trace fetch lists both records")
         boxes[0].click()
-        admin.fill("#file-reason", "e2e dashboard dispute — DFSA sampling")
+        reason = f"e2e dashboard dispute {org_id} — DFSA sampling"
+        admin.fill("#file-reason", reason)
         admin.wait_for_selector("#btn-file:not([disabled])", timeout=3000)
         admin.click("#btn-file")
         admin.wait_for_selector("#file-done", state="visible", timeout=10000)
@@ -94,8 +101,10 @@ def main() -> None:
         admin.click("#btn-file-view")
 
         # --- Admin: read before approval -> boundary message -------------------
-        admin.wait_for_selector("[data-open]", timeout=5000)
-        admin.click("[data-open]")
+        admin.select_option("#filter-status", "pending")
+        ours = f'[data-open]:has-text("{org_id}")'
+        admin.wait_for_selector(ours, timeout=5000)
+        admin.click(ours)
         admin.wait_for_selector("[data-read]", timeout=5000)
         admin.click("[data-read]")
         admin.wait_for_selector(".readout >> text=403", timeout=10000)
@@ -119,9 +128,9 @@ def main() -> None:
 
         # --- Admin: read approved record ---------------------------------------
         admin.click("#btn-back")
-        admin.click("#btn-reqs")
-        admin.wait_for_selector("[data-open]", timeout=5000)
-        admin.click("[data-open]")
+        admin.select_option("#filter-status", "approved")
+        admin.wait_for_selector(ours, timeout=10000)
+        admin.click(ours)
         admin.wait_for_selector("[data-read]", timeout=5000)
         admin.click("[data-read]")
         admin.wait_for_selector(".readout >> text=synthetic-1", timeout=10000)

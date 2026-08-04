@@ -13,6 +13,7 @@ from app.db.session import get_db
 from app.schemas import PrecheckIn, PrecheckOut
 from app.services.access import TraceAccessDeniedError
 from app.services.events import EventSequenceError
+from app.services.onboarding import require_onboarded
 from app.services.precheck import NoActivePolicyError, run_precheck
 
 # Told to the customer verbatim when they have no policy. A bare "no active
@@ -32,6 +33,7 @@ def precheck(
     org: Org = Depends(get_authenticated_org),
     db: Session = Depends(get_db),
 ) -> PrecheckOut:
+    require_onboarded(db, org)
     try:
         trace_uuid = uuid.UUID(body.trace_id)
     except ValueError as exc:

@@ -35,6 +35,8 @@ def main() -> None:
         f"{BASE}/v1/admin/orgs", headers={"x-admin-key": ADMIN_KEY},
         json={"org_id": org_id, "name": "Policy E2E DIFC"},
     ).json()["api_key"]
+    rq.put(f"{BASE}/v1/policies/profile", headers={"x-api-key": api_key},
+           json={"jurisdictions": ["difc"], "sectors": ["capital_markets"]})
 
     with sync_playwright() as pw:
         browser = pw.chromium.launch(executable_path="/opt/pw-browsers/chromium")

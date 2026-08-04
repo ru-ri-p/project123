@@ -47,6 +47,10 @@ def _org(client, *, policy: bool = True, difc: bool = False) -> str:
         "/v1/admin/orgs", headers={"x-admin-key": ADMIN_KEY},
         json={"org_id": org_id, "name": "Gate Test"},
     ).json()["api_key"]
+    # Onboarding is now a precondition for recording, so every org that records
+    # must declare its profile first.
+    client.put("/v1/policies/profile", headers={"x-api-key": key},
+               json={"jurisdictions": ["difc"], "sectors": ["capital_markets"]})
     if policy:
         client.put("/v1/policies/internal", headers={"x-api-key": key}, json={
             "name": "Internal", "version": "v1", "activate": True,

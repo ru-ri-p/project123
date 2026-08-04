@@ -78,6 +78,8 @@ def test_request_oversight_and_trace_tools(client) -> None:
     key = client.post(
         "/v1/admin/orgs", headers=A, json={"org_id": org_id, "name": "Oversight"}
     ).json()["api_key"]
+    client.put("/v1/policies/profile", headers={"x-api-key": key},
+               json={"jurisdictions": ["difc"], "sectors": ["capital_markets"]})
 
     trace = str(uuid.uuid4())
     for seq in (1, 2):

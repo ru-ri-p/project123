@@ -69,7 +69,8 @@ def _make_org(api_key: str) -> str:
     org_id = f"org_{uuid.uuid4().hex[:10]}"
     db = SessionLocal()
     try:
-        db.add(Org(id=org_id, name="T", api_key_hash=hash_api_key(api_key)))
+        db.add(Org(id=org_id, name="T", api_key_hash=hash_api_key(api_key),
+                   requires_profile=False))
         db.commit()
     finally:
         db.close()

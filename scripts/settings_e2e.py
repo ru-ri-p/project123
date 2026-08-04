@@ -45,6 +45,10 @@ def main() -> None:
     api_key = rq.post(f"{BASE}/v1/admin/orgs", headers=A,
                       json={"org_id": org_id, "name": "TradeEasy DMCC"}).json()["api_key"]
     H = {"x-api-key": api_key}
+    # Onboard via the API first: this script exercises CHANGING a profile, which
+    # is a different screen from the first-run wizard (covered by first_run_e2e).
+    rq.put(f"{BASE}/v1/policies/profile", headers=H,
+           json={"jurisdictions": ["difc"], "sectors": ["capital_markets"]})
 
     with sync_playwright() as pw:
         browser = pw.chromium.launch(executable_path="/opt/pw-browsers/chromium")
@@ -63,8 +67,7 @@ def main() -> None:
         ok("ISIC" in text, "sectors show their ISIC classification")
 
         # --- 1. Declare the profile ---------------------------------------
-        page.click('[data-juris="difc"]')
-        page.click('[data-sector="capital_markets"]')
+        # Already selected from the API-set profile; re-saving is a no-op edit.
         # Dismiss the connect toast first, or the wait below is satisfied by a
         # toast that is already on screen and we race the save.
         clear_toast(page)

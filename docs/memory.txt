@@ -1,0 +1,151 @@
+ATTEST — SESSION MEMORY
+=======================
+Append-only log of what was built, why, and what remains. Newest session last.
+No secrets, no keys, no customer data in this file — it is committed to the repo.
+
+WHAT ATTEST IS (one paragraph, for a cold start)
+------------------------------------------------
+A tamper-evident AI audit layer for UAE regulated finance. Every AI action is
+canonicalised, SHA-256 hashed, hash-chained, Ed25519-signed, Merkle-batched and
+anchored to an external RFC-3161 timestamp authority — so not even Attest can
+rewrite history. Customer content can be encrypted under customer-held keys
+("dark at rest"); Attest sees it only through a consent ceremony the customer
+approves, and every step of that ceremony is itself recorded in the same
+tamper-evident chain. On top of provenance sits a policy layer: the institution's
+own policy (decisive) plus jurisdiction rulebooks (advisory).
+
+STANDING RULES (from CLAUDE.md — do not violate)
+------------------------------------------------
+- Never commit secrets. keys/, .env, *.pem, *.key are gitignored.
+- ONE canonicalisation function (app/crypto/canonical.py), shared by write and
+  verify paths. Never fork it.
+- The break-and-detect tamper test must pass before every commit.
+- A verifier NEVER raises on bad input — it reports failure and continues.
+- Config from environment variables only.
+- SHA-256 / Ed25519 / AES-256-GCM, with a per-event algorithm id for migration.
+- Dev key custody is DISK for synthetic data only. Production = KMS/HSM.
+- Attest proves records are UNCHANGED, never that outputs are LAWFUL. Never
+  claim it "makes you compliant".
+
+
+================================================================================
+SESSION — 2026-08-03/04
+================================================================================
+Branch: claude/zealous-archimedes-8i4x3i (main kept in lockstep; both pushed)
+Deployed service: https://attest-api-ipvl.onrender.com
+
+BUILT THIS SESSION
+------------------
+1. Consent ceremony completed and made tamper-evident
+   - Slices 1-5b: asymmetric envelope encryption, customer-key mode, access
+     review, per-org signing keys, HTTP API, org-side client + CLI.
+   - Every ceremony action (request / approval / denial / EVERY read) is now a
+     signed, chained event in a per-request consent trace. Fail-closed: a read
+     whose audit event cannot be written returns nothing.
+   - Fixed a multi-tenancy bug: payloads were keyed on content hash alone, so two
+     customers storing identical content collided. Now (org_id, payload_hash).
+
+2. Two dashboards, rebuilt to the approved mockups
+   - /admin  — ops control room (gated on the admin key; that gate was missing in
+     the first redesign and caused a live "401 invalid admin key" report).
+   - /console, /dashboard — customer console.
+   - Fonts (Fraunces + IBM Plex) embedded as data: URIs; pages are fully
+     self-contained, no external requests.
+
+3. The gate — one call replaces the whole integration
+   - POST /v1/gate + attest.gate(output). Server assigns sequence numbers, so the
+     old precheck-then-record foot-gun is gone. Returns
+     compliant / flagged / blocked / unevaluated.
+   - Only the institution's OWN policy can block. Jurisdiction findings raise the
+     tier and can route to a human, never block.
+   - derive_status() is the single definition of the verdict; it is STORED on the
+     decision so the SDK, API and dashboards cannot drift.
+
+4. Jurisdiction-aware policy (DIFC first)
+   - Packs declare jurisdictions AND sectors. Necessary because the "Guidelines
+     for Financial Institutions Adopting Enabling Technologies" were issued
+     JOINTLY by CBUAE + SCA + DFSA + FSRA and reach all three UAE jurisdictions.
+   - Packs: difc_dp_reg10, difc_dp_law_5_2020, adgm_dp_regs (stub),
+     uae_onshore_core, uae_fin_enabling_tech, cbuae_ai_consumer, uae_health_ai.
+   - ALL are verification_status = "unverified" (see OPEN ITEMS).
+
+5. Settings — obligations derived, not cherry-picked
+   - Sectors follow UN ISIC Rev.4 (30 sectors, 9 groups, plus "other").
+   - Mandatory packs = f(jurisdictions x sectors). No unsubscribe exists.
+   - Adding applies instantly; REMOVING needs Attest's approval, and the rulebook
+     keeps applying while the request is pending (otherwise the request itself
+     would be the evasion).
+
+6. Outage resilience
+   - Found and fixed: the old AsyncFlushBuffer DROPPED events on flush failure.
+   - SDK now: caches policy+packs for local evaluation, queues events in an
+     encrypted on-disk buffer, signs each into its own device chain (Ed25519 key
+     auto-generated on first run), and replays on recovery. Server verifies every
+     signature and chain link before writing, all-or-nothing.
+   - Grafted events are marked `deferred` with both claimed and recorded times.
+   - cryptography moved from an extra to a BASE SDK dependency.
+
+7. Onboarding gate (this session's last piece)
+   - New orgs cannot record until they declare a profile; existing orgs are
+     grandfathered (requires_profile=False) so no live integration breaks.
+   - "No profile" returns 409 with code=profile_required. The SDK treats it as a
+     CONFIG error, never buffers it — otherwise the offline queue would fill with
+     events that can never be replayed.
+   - Console shows a first-run wizard (profile -> starter policy) instead of the
+     dashboard, and grandfathered orgs are NOT trapped in it.
+
+8. Ops dashboard scale fix
+   - /v1/admin/orgs was unbounded; at 722 test orgs the pickers became unusable.
+     Now bounded + searchable, and /v1/admin/stats shows the most active orgs
+     rather than every one.
+
+INFRASTRUCTURE / PROCESS
+------------------------
+- Two-repo split: development is shaundytradesfx/govproject01, but Render builds
+  from ru-ri-p/project123. A GitHub Action mirrors main on every push
+  (.github/workflows/mirror-to-deploy-repo.yml, needs MIRROR_TOKEN secret).
+  This cost ~2 days to diagnose: Render reported "Deploy live" while serving code
+  from before any of the consent work. See docs/DEPLOY_MIRROR.md.
+- Render has autoDeploy:false — pushing does NOT deploy. Manual Deploy required.
+- Verify a deploy with a NEW route, not /health: /health answers on stale code.
+
+TESTING
+-------
+151 pytest tests. Eight browser E2E suites (real Chromium, run against a local
+server on :8300 with ADMIN_API_KEY=e2e-admin-key):
+  first_run_e2e, console_e2e, onboarding_e2e, settings_e2e,
+  gate_e2e, outage_e2e, policy_e2e, admin_e2e
+Local Postgres for tests: /usr/lib/postgresql/16/bin, data dir /tmp/pg5433,
+port 5433, run as the `postgres` user (pg_ctl refuses to run as root). The
+container reclaims it regularly — restart it when tests suddenly all skip.
+
+OPEN ITEMS / NEXT
+-----------------
+- REGULATION AUTO-UPDATE (agreed, NOT STARTED). User chose "detect and
+  auto-publish", with the explicit condition: triple-verify nothing is fabricated.
+  Agreed design: (1) content must come from the pack's registered official source
+  URL, snapshot retained; (2) every citation and quoted obligation must appear
+  VERBATIM in that snapshot or the change is rejected; (3) extraction must be
+  reproducible across runs, any variance quarantined. Auto-published packs get a
+  NEW status (e.g. source_verified) that must never be confused with
+  counsel_reviewed. Watcher runs on the deployed service (this build environment
+  cannot reach regulator sites — org egress policy blocks difc.com, adgm.com and
+  the DFSA rulebook host; WebSearch works, direct fetch does not).
+- All pack content is UNVERIFIED: drafted from public summaries, not transcribed
+  from official texts. `provision` is deliberately left None wherever an article
+  number could not be confirmed. Nothing invents a clause number. Legal review
+  deferred by the user, to be done later. See docs/REGULATION_SOURCING.md.
+- Named user identity on both sides — the consent trail says "attest_admin
+  looked", not WHO. Biggest remaining trust gap.
+- Notifications when an access request is filed (currently found by refreshing).
+- Key rotation before launch: keys have passed through chat.
+- Consolidate the two repos and retire the mirror.
+- Pre-existing lint/type debt left alone: 7 mypy errors in
+  app/services/policy/evaluator.py, app/api/approvals.py, app/api/traces.py;
+  E501s in scripts/generate_pitch_docx.py.
+
+TRADEEASY PILOT
+---------------
+Shelved at the user's instruction until the gate + settings work landed. The org
+is org_tradeeasy_ck (key attest_pilot_2h7k9m, to be rotated). The earlier consent
+test passed live: 403 before approval, 200 after, out-of-scope still 403.

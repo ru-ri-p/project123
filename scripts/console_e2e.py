@@ -28,7 +28,8 @@ def make_org():
     org_id = f"org_e2e_{uuid.uuid4().hex[:8]}"
     api_key = f"key_{uuid.uuid4().hex}"
     db = SessionLocal()
-    db.add(Org(id=org_id, name="Console E2E", api_key_hash=hash_api_key(api_key)))
+    db.add(Org(id=org_id, name="Console E2E", api_key_hash=hash_api_key(api_key),
+               requires_profile=False))
     db.commit()
     db.close()
     return org_id, api_key

@@ -45,6 +45,9 @@ def main() -> None:
         json={"org_id": org_id, "name": "TradeEasy DMCC"},
     ).json()["api_key"]
 
+    rq.put(f"{BASE}/v1/policies/profile", headers={"x-api-key": api_key},
+           json={"jurisdictions": ["difc"], "sectors": ["capital_markets"]})
+
     # The dead end they must NOT hit silently.
     r = rq.post(f"{BASE}/v1/precheck", headers={"x-api-key": api_key}, json={
         "trace_id": str(uuid.uuid4()), "seq": 1, "action": "model_completion",
@@ -74,24 +77,17 @@ def main() -> None:
         page.wait_for_selector("#setup-needed", state="visible", timeout=8000)
         ok("no active policy" in page.inner_text("#setup-needed").lower(),
            "compliance screen explains the missing policy")
-        page.wait_for_selector("#jurisdiction-nudge", state="visible", timeout=5000)
-        ok("DIFC" in page.inner_text("#jurisdiction-nudge"),
-           "compliance screen suggests DIFC when nothing is adopted")
-
         # One click creates their policy.
         page.click("#btn-starter-policy")
         page.wait_for_selector("#toast.ok >> text=Starter policy published", timeout=10000)
         page.wait_for_selector("#setup-needed", state="hidden", timeout=8000)
         ok(True, "one click published a starter policy; the prompt clears")
 
-        # They adopt DIFC themselves from the picker.
-        page.select_option("#avail-packs", "difc_dp_reg10")
-        page.evaluate(
-            "const t=document.querySelector('#toast'); t.className=''; t.style.display='none'")
-        page.click("#btn-adopt")
-        page.wait_for_selector("#toast.ok >> text=adopted", timeout=10000)
+        # Rulebooks are no longer adopted one by one — they are DERIVED from the
+        # profile declared at onboarding, so the customer cannot skip any.
+        page.click("#btn-mypacks")
         page.wait_for_selector("#mypacks >> text=Regulation 10", timeout=10000)
-        ok(True, "customer adopted DIFC Regulation 10 themselves")
+        ok(True, "DIFC Regulation 10 applies, derived from the declared profile")
 
         # Now their app's precheck works, and the finding is cited on screen.
         r = rq.post(f"{BASE}/v1/precheck", headers={"x-api-key": api_key}, json={

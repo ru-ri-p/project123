@@ -130,6 +130,7 @@ def org_overview(
         daily=[DailyCount(day=d, count=counts.get(d, 0)) for d in days],
         active_policy_version=active_policy.version if active_policy else None,
         jurisdictions_adopted=adopted,
+        requires_profile=org.requires_profile,
     )
 
 

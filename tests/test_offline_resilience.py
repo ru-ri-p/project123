@@ -49,6 +49,8 @@ def _org(client) -> str:
         "/v1/admin/orgs", headers={"x-admin-key": ADMIN_KEY},
         json={"org_id": org_id, "name": "Offline Test"},
     ).json()["api_key"]
+    client.put("/v1/policies/profile", headers={"x-api-key": key},
+               json={"jurisdictions": ["difc"], "sectors": ["capital_markets"]})
     client.put("/v1/policies/internal", headers={"x-api-key": key}, json={
         "name": "Internal", "version": "v1", "activate": True,
         "rules": {"schema_version": 2, "engine": "json", "rules": []}})
@@ -215,8 +217,10 @@ def test_bundle_carries_policy_and_adopted_packs(client) -> None:
 
     bundle = client.get("/v1/sdk/bundle", headers={"x-api-key": key}).json()
     assert bundle["policy_version"] == "v1"
-    assert [p["code"] for p in bundle["packs"]] == ["difc_dp_reg10"]
-    assert bundle["packs"][0]["rules"], "pack rules must be shipped for local evaluation"
+    by_code = {p["code"]: p for p in bundle["packs"]}
+    # The profile also derives packs, so assert membership rather than equality.
+    assert "difc_dp_reg10" in by_code
+    assert by_code["difc_dp_reg10"]["rules"], "pack rules must ship for local evaluation"
 
 
 def test_local_verdict_matches_the_server(client, tmp_path) -> None:

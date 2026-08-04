@@ -105,7 +105,14 @@ def stats(db: Session = Depends(get_db)) -> AdminStatsOut:
         by_org.setdefault(org_id, {})[day.strftime("%Y-%m-%d")] = count
     days = [(window_start + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(12)]
 
-    orgs = db.query(Org).order_by(Org.created_at.desc()).all()
+    # Only the most recently active orgs — an Overview is a glance, not a census,
+    # and computing 12-day sparklines for every customer scales badly.
+    active_ids = sorted(by_org, key=lambda oid: sum(by_org[oid].values()), reverse=True)[:12]
+    orgs = (
+        db.query(Org).filter(Org.id.in_(active_ids)).all()
+        if active_ids
+        else db.query(Org).order_by(Org.created_at.desc()).limit(12).all()
+    )
     activity = [
         AdminOrgActivity(
             id=o.id,
@@ -144,8 +151,19 @@ def _org_out(org: Org) -> AdminOrgOut:
 
 
 @router.get("/orgs", response_model=list[AdminOrgOut])
-def list_orgs(db: Session = Depends(get_db)) -> list[AdminOrgOut]:
-    orgs = db.query(Org).order_by(Org.created_at.desc()).all()
+def list_orgs(
+    q: str | None = None, limit: int = 100, db: Session = Depends(get_db)
+) -> list[AdminOrgOut]:
+    """Newest first, bounded, and searchable.
+
+    Deliberately not unbounded: rendering every customer is fine at ten and
+    unusable at several hundred, and it makes the org pickers unworkable.
+    """
+    query = db.query(Org)
+    if q:
+        needle = f"%{q.strip()}%"
+        query = query.filter(Org.id.ilike(needle) | Org.name.ilike(needle))
+    orgs = query.order_by(Org.created_at.desc()).limit(max(1, min(limit, 500))).all()
     return [_org_out(o) for o in orgs]
 
 

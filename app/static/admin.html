@@ -235,6 +235,8 @@
       <div id="file-flow">
         <div class="card" style="margin-bottom:14px;">
           <div class="eyebrow" style="margin-bottom:10px;">ORGANISATION</div>
+          <input class="field" id="file-orgsearch" placeholder="Search by name or id…"
+                 style="margin-bottom:10px;">
           <div id="file-orgs" style="display:flex;gap:10px;flex-wrap:wrap;"><div class="empty">Connect to load.</div></div>
         </div>
         <div class="card" style="margin-bottom:14px;">
@@ -652,6 +654,11 @@ async function loadFileOrgs(orgs) {
     fileGate();
   }));
 }
+$("#file-orgsearch").addEventListener("input", async (ev) => {
+  const q = ev.target.value.trim();
+  try { loadFileOrgs(await api.call("/v1/admin/orgs" + (q ? `?q=${encodeURIComponent(q)}` : ""))); }
+  catch (e) { /* surfaced by the main loader */ }
+});
 $("#btn-fetch").addEventListener("click", async () => {
   const t = $("#file-trace").value.trim();
   if (!t) { toast("Enter a trace id.", "err"); return; }

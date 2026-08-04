@@ -54,6 +54,11 @@ class Org(Base):
     # Org's PUBLIC wrapping key (PEM). Attest holds only this; the private key
     # stays in the org's custody. Required for confidentiality_mode=customer_key.
     wrapping_public_pem: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Onboarding gate: an org must declare its profile (jurisdictions x sectors)
+    # before it can record anything, so obligations are always established BEFORE
+    # evidence exists. Orgs that predate the gate are grandfathered to False so a
+    # live integration is never broken by a deploy; they are prompted instead.
+    requires_profile: Mapped[bool] = mapped_column(nullable=False, server_default="true")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

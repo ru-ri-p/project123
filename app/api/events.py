@@ -13,6 +13,7 @@ from app.db.session import get_db
 from app.schemas import EventIn, EventOut
 from app.services.access import TraceAccessDeniedError
 from app.services.events import EventSequenceError, InvalidEventTypeError, record_event
+from app.services.onboarding import require_onboarded
 
 router = APIRouter(prefix="/v1")
 
@@ -23,6 +24,7 @@ def post_event(
     org: Org = Depends(get_authenticated_org),
     db: Session = Depends(get_db),
 ) -> EventOut:
+    require_onboarded(db, org)
     try:
         trace_uuid = uuid.UUID(body.trace_id)
     except ValueError as exc:

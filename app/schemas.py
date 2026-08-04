@@ -526,6 +526,9 @@ class OrgOverviewOut(BaseModel):
     # prechecked, so the dashboard says so rather than letting them find out later.
     active_policy_version: str | None = None
     jurisdictions_adopted: list[str] = Field(default_factory=list)
+    # True only for orgs created after the onboarding gate shipped. Grandfathered
+    # orgs are prompted, never blocked — and must not be trapped in the wizard.
+    requires_profile: bool = False
 
 
 class TraceEventMetaOut(BaseModel):

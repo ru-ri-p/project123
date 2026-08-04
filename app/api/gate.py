@@ -19,6 +19,7 @@ from app.schemas import GateIn, GateOut
 from app.services.access import TraceAccessDeniedError
 from app.services.events import EventSequenceError, InvalidEventTypeError
 from app.services.gate import run_gate
+from app.services.onboarding import require_onboarded
 
 router = APIRouter(prefix="/v1", tags=["gate"])
 
@@ -29,6 +30,8 @@ def gate(
     org: Org = Depends(get_authenticated_org),
     db: Session = Depends(get_db),
 ) -> GateOut:
+    require_onboarded(db, org)
+
     trace_id: uuid.UUID | None = None
     if body.trace_id:
         try:

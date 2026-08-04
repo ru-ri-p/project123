@@ -42,6 +42,8 @@ def main() -> None:
                       json={"org_id": org_id, "name": "Outage E2E"}).json()["api_key"]
     rq.post(f"{BASE}/v1/admin/orgs/{org_id}/regulation-packs",
             headers={"x-admin-key": ADMIN_KEY}, json={"pack_code": "difc_dp_reg10"})
+    rq.put(f"{BASE}/v1/policies/profile", headers={"x-api-key": api_key},
+           json={"jurisdictions": ["difc"], "sectors": ["capital_markets"]})
     rq.put(f"{BASE}/v1/policies/internal", headers={"x-api-key": api_key}, json={
         "name": "Internal", "version": "v1", "activate": True,
         "rules": {"schema_version": 2, "engine": "json", "rules": [
