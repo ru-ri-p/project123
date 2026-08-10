@@ -553,3 +553,45 @@ TWO OF MY BUGS FOUND BY THE E2E, BOTH FIXED
 
 NOTE: running eleven E2E suites back to back trips OUR OWN rate limiter (120
 req/60s). Space them out or wait on /v1/admin/ping returning 200.
+
+--------------------------------------------------------------------------------
+DECISION 2026-08-10: pack authoring deferred; ship the TradeEasy pilot
+--------------------------------------------------------------------------------
+Founder clarified the intent of hand-supplied text: it is for ATTEST'S OWN TEAM
+(and later their lawyers) to populate law content, NOT for customers. Correct —
+the Supply text control is behind the admin key in /admin and no customer can
+reach it. Worth restating in future sessions because the phrasing is easy to
+misread.
+
+IMPORTANT DISTINCTION THE FOUNDER NEEDED, AND ANYONE PICKING THIS UP WILL TOO:
+supplying official text does NOT populate the law. There are two separate things.
+  - THE RULE — the obligation, tier and reason. Authored by a person. This is
+    what a customer actually follows.
+  - THE CITATION — which provision the rule comes from. Evidence for the rule.
+Gate 2 only confirms a `provision_candidate` a human already wrote. Every pack
+currently has ZERO candidates (adgm_dp_regs has zero RULES — a bare stub), so
+pasting official text today confirms nothing and publishes nothing. It only
+gives drift detection a snapshot.
+
+The real sequence is: (1) a person reads the official text and decides which
+provision a rule cites; (2) that candidate is written into the pack; (3) the text
+is supplied and the machine confirms the candidate verbatim. Step 1 is judgement
+Claude cannot do reliably — the founder said so and is right. Step 3 is built.
+STEP 2 HAS NO INTERFACE: candidates live in app/domain/regulation_packs.py, so
+today it needs a code change and a deploy. That is the real blocker for the
+lawyer workflow, and the obvious next build when there is content to enter.
+
+FOUNDER'S CALL: do not build the pack editor yet — get TradeEasy moving first.
+Building an authoring UI before there is lawyer input to put in it is
+speculative. Agreed.
+
+ALSO CORRECTED: do not paste "everything findable" into a source. Gate 1's claim
+is "this is what THAT URL served" — one source, one instrument, matching the
+registered URL. An aggregation breaks both the provenance claim and drift
+detection, since the next snapshot would not be comparable.
+
+TRADEEASY IS UNBLOCKED. All seven packs are seeded on production including
+uae_fin_enabling_tech; org search and the PROFILE column are live (fb260c5).
+b8f4fd2 (supply text) does NOT need deploying for the pilot — it is ops-side.
+Sent the founder ready-to-send email copy. Order remains: send quickstart ->
+they onboard -> verify profile_configured -> only THEN require-onboarding.
