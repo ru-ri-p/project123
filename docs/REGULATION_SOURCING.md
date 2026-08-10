@@ -108,3 +108,47 @@ cron has the wall clock to spare and the per-host pacing keeps it polite anyway.
 Regulation packs are Attest's. The institution's **own** policy is authored by the
 institution via `PUT /v1/policies/internal` and is the only thing that can deny an
 action. Attest supplies no template and takes no view on its content.
+
+## When a regulator's site refuses us
+
+`difc.com` answers **429** and `rulebook.centralbank.ae` answers **403** to an
+honestly-identified fetch from a datacentre — on the first request of the day,
+after per-host pacing, retries and `Retry-After`. That is bot protection, not
+rate limiting, and no amount of politeness fixes it. Four of seven sources could
+never be checked automatically.
+
+We will **not** impersonate a browser to get around it. A test asserts our user
+agent claims to be no browser. If a regulator declines to serve an honestly
+identified client, that is their decision to make.
+
+Instead, a person may supply the official text. **Gate 1 then has a weaker second
+form**, and everything downstream is labelled accordingly:
+
+| | Fetched by Attest | Supplied by a person |
+|---|---|---|
+| Gate 1 | HTTPS fetch from the registered URL | A named person attests the URL served this |
+| Gates 2 & 3 | unchanged | unchanged |
+| Published status | `source_verified` | `attested_verified` |
+| Version marker | `+sv` | `+av` |
+
+The distinction is load-bearing. Our threat model includes a malicious insider
+**on Attest's side**, so a claim resting on an employee's word must never look
+identical to one the machine fetched itself. What is recorded: who attested,
+when, their note on where they got it, the SHA-256 of exactly what they supplied,
+and the retained snapshot — so anyone who distrusts us can diff it against the
+live page. `attested_verified` is never promoted to `source_verified`, and
+neither is ever legal review.
+
+Gates 2 and 3 still earn their keep here: a machine checking every citation
+literally against the text beats a person reading it and mistyping an article
+number. Supplying text is not a route around them — a citation absent from the
+supplied text still fails to publish.
+
+Hand-maintained sources are re-probed weekly. If the block lifts, the source
+returns to automatic on its own and future confirmations carry machine
+provenance again. A probe that still fails records nothing: re-reporting a
+condition already known and handled is how a quarantine queue becomes noise.
+Packs already published from an attestation keep their weaker label — relabelling
+in place would break the record of what was live on a given date.
+
+To supply text: **/admin → Regulation Watch → Supply text** on the source's row.

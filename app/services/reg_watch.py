@@ -23,6 +23,17 @@ Every candidate must pass all three, in order, or it is quarantined:
       and hashed. Nothing enters the pipeline from anywhere else, and every
       published claim stays re-checkable against the text it came from.
 
+      Gate 1 has a WEAKER SECOND FORM, because some regulators refuse automated
+      clients outright (difc.com answers 429, rulebook.centralbank.ae 403, to an
+      honestly-identified fetch from any datacentre). For those, a NAMED PERSON
+      supplies the official text and attests where it came from. The attestation
+      — who, when, what note, what hash — is recorded, the snapshot is retained
+      so anyone can diff it against the live page, and anything published from
+      it is marked ATTESTED_VERIFIED, never SOURCE_VERIFIED. The distinction is
+      load-bearing: our threat model includes a malicious insider on OUR side,
+      and a claim resting on an employee's word must never look identical to one
+      the machine fetched itself.
+
   GATE 2 — VERBATIM GROUNDING.  Every claim (a provision reference, a quoted
       obligation, an effective date) must appear literally in that snapshot,
       compared on normalised whitespace and case. No paraphrase, no inference,
@@ -47,7 +58,10 @@ judgement is exactly what this pipeline must not pretend to have.
 
 Auto-published packs are marked SOURCE_VERIFIED — a status that says "mechanically
 checked against the official text", and which must never be read as, or promoted
-to, `counsel_reviewed`.
+to, `counsel_reviewed`. Packs confirmed against hand-supplied text are marked
+ATTESTED_VERIFIED instead, and carry `+av` rather than `+sv` in the version
+string, so the weaker provenance travels with the pack itself rather than living
+only in a database column.
 """
 
 from __future__ import annotations
@@ -67,6 +81,19 @@ from app.db.models import RegulationChange, RegulationPack, RegulationSource
 
 # A new verification status, distinct from anything implying legal review.
 SOURCE_VERIFIED = "source_verified"
+# Gates 2 and 3 passed mechanically, but Gate 1 was satisfied by a NAMED PERSON
+# attesting where the text came from, not by our own fetch. Weaker than
+# SOURCE_VERIFIED and deliberately a separate value: an insider could paste
+# doctored text, so a claim resting on a human must never be indistinguishable
+# from one the machine fetched itself. Never promoted to either SOURCE_VERIFIED
+# or counsel_reviewed.
+ATTESTED_VERIFIED = "attested_verified"
+
+CHECK_MODE_AUTO = "auto"
+CHECK_MODE_MANUAL = "manual"
+
+CHANGE_TEXT_SUPPLIED = "text_supplied"
+CHANGE_SOURCE_RECOVERED = "source_recovered"
 
 CHANGE_SOURCE_DRIFT = "source_drift"
 CHANGE_SOURCE_BLOCKED = "source_blocked"
@@ -87,6 +114,14 @@ REPRODUCIBILITY_RUNS = 3
 # transient. Three days of the same answer is a wall, not a blip.
 PERSISTENT_FAILURE_THRESHOLD = int(
     os.environ.get("REGWATCH_PERSISTENT_FAILURE_THRESHOLD", "3")
+)
+
+# How often we quietly re-probe a source that a person is maintaining by hand.
+# Blocks get lifted; if this one does, we should go back to machine provenance on
+# our own rather than relying on someone noticing. A failed probe is silent —
+# re-reddening a queue about a condition already known and handled is noise.
+MANUAL_RETRY_SECONDS = float(
+    os.environ.get("REGWATCH_MANUAL_RETRY_SECONDS", str(7 * 24 * 60 * 60))
 )
 
 # --- politeness ---------------------------------------------------------------
@@ -491,6 +526,11 @@ def check_source(
         source.last_status = "error"
         source.last_error = str(exc)[:500]
         source.consecutive_failures += 1
+        if source.check_mode == CHECK_MODE_MANUAL:
+            source.next_check_at = now + timedelta(seconds=MANUAL_RETRY_SECONDS)
+            source.last_status = "attested"
+            db.flush()
+            return []
         db.flush()
         return [
             _record_change(
@@ -517,7 +557,14 @@ def check_source(
         # about the instrument; the rest is evidence about the fetch.
         source.last_error = f"HTTP {status_code}"
         source.consecutive_failures += 1
-        db.flush()
+        if source.check_mode == CHECK_MODE_MANUAL:
+            # A weekly probe of a source a person already maintains. Still
+            # blocked is the expected answer, not news — recording it would
+            # re-redden a queue about a condition already handled.
+            source.next_check_at = now + timedelta(seconds=MANUAL_RETRY_SECONDS)
+            source.last_status = "attested"
+            db.flush()
+            return []
         persistent = source.consecutive_failures >= PERSISTENT_FAILURE_THRESHOLD
         if status_code in (404, 410):
             change_type, summary = CHANGE_SOURCE_GONE, (
@@ -560,7 +607,118 @@ def check_source(
 
     # Reached the page: whatever was wrong before has cleared.
     source.consecutive_failures = 0
+    if source.check_mode == CHECK_MODE_MANUAL:
+        # The block lifted. Go back to machine provenance on our own — Gate 1 is
+        # stronger when we fetch it than when a person swears to it.
+        source.check_mode = CHECK_MODE_AUTO
+        db.flush()
+        changes.append(
+            _record_change(
+                db, pack_code=source.pack_code, url=source.url,
+                change_type=CHANGE_SOURCE_RECOVERED, status=STATUS_ACTIONED,
+                summary=(
+                    "This source was being maintained by hand because the site "
+                    "refused automated access. It now answers, so it has returned "
+                    "to automatic checking and future confirmations carry machine "
+                    "provenance again."
+                ),
+                evidence={"previous_mode": CHECK_MODE_MANUAL},
+            )
+        )
 
+    return changes + _evaluate_snapshot(
+        db, source, text, auto_publish=auto_publish, confirm_drift=True
+    )
+
+
+def supply_text(
+    db: Session,
+    source: RegulationSource,
+    text: str,
+    *,
+    attested_by: str,
+    note: str | None = None,
+    auto_publish: bool = True,
+) -> list[RegulationChange]:
+    """Accept official text a person obtained by hand, and run Gates 2 and 3.
+
+    For sources whose host refuses automated clients. GATE 1 IS DIFFERENT HERE
+    and that difference is the whole point: instead of "we fetched this over
+    HTTPS from the registered URL", the provenance is "a named person attests
+    this is what that URL served, on this date". Weaker — a malicious insider
+    could paste doctored text — so it is recorded verbatim as an attestation,
+    the snapshot is retained so anyone can diff it against the live page, and
+    anything published from it is marked ATTESTED_VERIFIED, never
+    SOURCE_VERIFIED.
+
+    Gates 2 and 3 are untouched and still earn their keep: a machine checking
+    every citation literally against the text beats a person reading it and
+    mistyping an article number.
+    """
+    attested_by = (attested_by or "").strip()
+    if not attested_by:
+        # An unattributed attestation is not an attestation.
+        msg = "supplying text by hand requires a named attestor"
+        raise WatchError(msg)
+    if not (text or "").strip():
+        msg = "no text supplied"
+        raise WatchError(msg)
+
+    now = datetime.now(UTC)
+    source.check_mode = CHECK_MODE_MANUAL
+    source.attested_by = attested_by[:200]
+    source.attested_at = now
+    source.attestation_note = (note or "").strip()[:2000] or None
+    source.last_checked_at = now
+    source.last_status = "attested"
+    source.last_error = None
+    source.consecutive_failures = 0
+    # Probed again in a week in case the block lifts.
+    source.next_check_at = now + timedelta(seconds=MANUAL_RETRY_SECONDS)
+    db.flush()
+
+    changes = [
+        _record_change(
+            db, pack_code=source.pack_code, url=source.url,
+            change_type=CHANGE_TEXT_SUPPLIED, status=STATUS_ACTIONED,
+            summary=(
+                f"Official text supplied by hand by {source.attested_by}, because "
+                f"this site refuses automated access. Provenance rests on that "
+                f"attestation rather than on a fetch by Attest."
+            ),
+            evidence={
+                "attested_by": source.attested_by,
+                "attested_at": now.isoformat(),
+                "note": source.attestation_note,
+                "text_sha256": content_hash(text),
+                "supplied_bytes": len(text),
+            },
+            after_hash=content_hash(text),
+        )
+    ]
+    # Drift needs no two-sweep confirmation here: a person put this text in
+    # deliberately, so it is not a rotating banner or an A/B variant.
+    return changes + _evaluate_snapshot(
+        db, source, text, auto_publish=auto_publish, confirm_drift=False
+    )
+
+
+def _evaluate_snapshot(
+    db: Session,
+    source: RegulationSource,
+    text: str,
+    *,
+    auto_publish: bool,
+    confirm_drift: bool,
+) -> list[RegulationChange]:
+    """Detect drift and run Gates 2 and 3 against one body of official text.
+
+    Shared by the fetched and the hand-supplied paths on purpose: the gates that
+    prevent fabrication must not have two implementations that can drift apart.
+    Only GATE 1 differs between the callers, and that difference is carried on
+    the source as check_mode.
+    """
+    changes: list[RegulationChange] = []
     new_hash = content_hash(text)
     previous_hash = source.content_hash
     first_sight = previous_hash is None
@@ -572,7 +730,7 @@ def check_source(
     # nobody reads.
     drifted = False
     if changed:
-        if source.pending_hash == new_hash:
+        if not confirm_drift or source.pending_hash == new_hash:
             drifted = True
             source.pending_hash = None
         else:
@@ -582,7 +740,9 @@ def check_source(
     else:
         source.pending_hash = None
 
-    # GATE 1 satisfied: fetched from the registered URL over HTTPS, snapshotted.
+    # GATE 1 satisfied — by our own HTTPS fetch, or by a named attestation. Which
+    # one is recorded on the source; the snapshot is retained either way so the
+    # claim stays re-checkable against the live page by someone who distrusts us.
     source.snapshot = text[:200_000]
     source.content_hash = new_hash
     db.flush()
@@ -640,11 +800,23 @@ def check_source(
                     summary=(
                         f"Confirmed {len(confirmed)} provision citation(s) verbatim "
                         f"against the official source and published {version}."
+                        + (
+                            " Provenance is a human attestation, not a fetch by "
+                            f"Attest ({source.attested_by})."
+                            if source.check_mode == CHECK_MODE_MANUAL
+                            else ""
+                        )
                     ),
                     evidence={
                         "gates_passed": ["provenance", "verbatim", "reproducibility"],
+                        "provenance": (
+                            "attestation"
+                            if source.check_mode == CHECK_MODE_MANUAL
+                            else "fetched"
+                        ),
+                        "attested_by": source.attested_by,
                         "confirmed": confirmed,
-                        "verification_status": SOURCE_VERIFIED,
+                        "verification_status": _published_status(source),
                     },
                     after_hash=new_hash, published_version=version,
                 )
@@ -659,6 +831,17 @@ def check_source(
                 )
             )
     return changes
+
+
+def _published_status(source: RegulationSource) -> str:
+    """What a machine-confirmed pack may honestly claim.
+
+    Turns entirely on whether GATE 1 was our fetch or someone's word. Neither
+    value is legal review, and neither is ever promoted to the other.
+    """
+    if source.check_mode == CHECK_MODE_MANUAL:
+        return ATTESTED_VERIFIED
+    return SOURCE_VERIFIED
 
 
 def _publish_confirmations(
@@ -681,7 +864,11 @@ def _publish_confirmations(
             rule["provision_confirmed_at"] = datetime.now(UTC).isoformat()
         rules.append(rule)
 
-    version = f"{pack.version}+sv{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}"
+    # +sv = source-verified (we fetched it). +av = attested-verified (a person
+    # did). Legible in the version string itself, so the weaker provenance
+    # travels with the pack rather than living only in a database column.
+    marker = "av" if source.check_mode == CHECK_MODE_MANUAL else "sv"
+    version = f"{pack.version}+{marker}{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}"
     upsert_pack(
         db,
         {
@@ -696,7 +883,7 @@ def _publish_confirmations(
             "source_url": pack.source_url,
             "effective_date": pack.effective_date,
             # Mechanically checked against the official text. NOT legal review.
-            "verification_status": SOURCE_VERIFIED,
+            "verification_status": _published_status(source),
             "schema_version": doc.get("schema_version", 2),
             "engine": doc.get("engine", "json"),
             "rules": rules,
@@ -713,6 +900,11 @@ def due_sources(
     A never-checked source (NULL) sorts first, so a freshly registered pack is
     picked up on the very next run rather than waiting out an interval it was
     never part of.
+
+    Hand-maintained sources appear here too, but only once a week and only as a
+    quiet probe — see check_source, which records nothing when one still fails.
+    They are not excluded outright because a lifted block should return us to
+    machine provenance without anyone having to notice.
     """
     now = now or datetime.now(UTC)
     cap = MAX_SOURCES_PER_RUN if limit is None else limit

@@ -742,3 +742,148 @@ def test_a_404_is_never_softened_by_the_streak_logic(db) -> None:
     db.flush()
     assert changes[0].change_type == reg_watch.CHANGE_SOURCE_GONE
     assert "withdrawn" in changes[0].summary
+
+
+# --- hand-supplied text: a weaker Gate 1, recorded as weaker ------------------
+
+
+def _blocked_source(db, candidates=None):
+    from app.services import reg_watch
+
+    pack = _pack(db, candidates=candidates or {"real": "Article 26"})
+    reg_watch.register_sources(db)
+    return pack, next(s for s in _sources(db, pack.code))
+
+
+def test_hand_supplied_text_is_never_labelled_as_fetched(db) -> None:
+    """THE load-bearing test. Our threat model includes a malicious insider on
+    OUR side, so a claim resting on an employee's word must never be
+    indistinguishable from one the machine fetched itself."""
+    from app.services import reg_watch
+
+    pack, source = _blocked_source(db)
+    reg_watch.supply_text(db, source, OFFICIAL_TEXT,
+                          attested_by="A. Operator", note="downloaded by hand")
+    db.commit()
+
+    published = (
+        db.query(reg_watch.RegulationPack)
+        .filter(reg_watch.RegulationPack.code == pack.code)
+        .order_by(reg_watch.RegulationPack.created_at.desc())
+        .first()
+    )
+    assert published.verification_status == reg_watch.ATTESTED_VERIFIED
+    assert published.verification_status != reg_watch.SOURCE_VERIFIED
+    assert "+av" in published.version, "the weaker provenance rides on the version"
+    assert "+sv" not in published.version
+
+
+def test_the_gates_still_run_on_hand_supplied_text(db) -> None:
+    """Supplying text by hand must not become a way to publish a citation the
+    text does not contain. Gate 2 is exactly as unforgiving."""
+    from app.services import reg_watch
+
+    pack, source = _blocked_source(
+        db, candidates={"real": "Article 26", "invented": "Article 99"}
+    )
+    reg_watch.supply_text(db, source, OFFICIAL_TEXT, attested_by="A. Operator")
+    db.commit()
+
+    published = (
+        db.query(reg_watch.RegulationPack)
+        .filter(reg_watch.RegulationPack.code == pack.code)
+        .order_by(reg_watch.RegulationPack.created_at.desc())
+        .first()
+    )
+    by_id = {r["id"]: r for r in published.rules["rules"]}
+    assert by_id["real"]["provision"] == "Article 26"
+    assert by_id["invented"]["provision"] is None, (
+        "an absent citation must not publish just because a human supplied the text"
+    )
+
+
+def test_an_attestation_needs_a_name(db) -> None:
+    """An unattributed attestation is not an attestation."""
+    from app.services import reg_watch
+
+    _, source = _blocked_source(db)
+    for bad in ("", "   "):
+        with pytest.raises(reg_watch.WatchError):
+            reg_watch.supply_text(db, source, OFFICIAL_TEXT, attested_by=bad)
+    with pytest.raises(reg_watch.WatchError):
+        reg_watch.supply_text(db, source, "   ", attested_by="A. Operator")
+
+
+def test_the_attestation_is_recorded_for_an_auditor(db) -> None:
+    """Who said so, when, and what exactly they supplied — or it is unauditable."""
+    from app.services import reg_watch
+
+    _, source = _blocked_source(db)
+    changes = reg_watch.supply_text(
+        db, source, OFFICIAL_TEXT, attested_by="A. Operator",
+        note="downloaded the PDF from difc.com",
+    )
+    db.flush()
+
+    supplied = next(c for c in changes
+                    if c.change_type == reg_watch.CHANGE_TEXT_SUPPLIED)
+    assert supplied.evidence["attested_by"] == "A. Operator"
+    assert supplied.evidence["note"] == "downloaded the PDF from difc.com"
+    assert supplied.evidence["text_sha256"] == reg_watch.content_hash(OFFICIAL_TEXT)
+    assert source.attested_by == "A. Operator" and source.attested_at is not None
+    assert source.snapshot, "the text is kept so anyone can diff it against the page"
+    assert source.check_mode == reg_watch.CHECK_MODE_MANUAL
+
+
+def test_a_blocked_source_stops_reddening_the_queue(db) -> None:
+    """A permanently red queue is one nobody reads. Once a person maintains a
+    source, a still-failing weekly probe is expected, not news."""
+    from app.services import reg_watch
+
+    _, source = _blocked_source(db)
+    reg_watch.supply_text(db, source, OFFICIAL_TEXT, attested_by="A. Operator")
+    db.flush()
+
+    source.next_check_at = None
+    changes = reg_watch.check_source(
+        db, source, fetcher=_fetcher("", status=403), auto_publish=False
+    )
+    assert changes == [], "a known block re-reported weekly is noise"
+    assert source.check_mode == reg_watch.CHECK_MODE_MANUAL
+    assert source.next_check_at is not None
+
+
+def test_a_lifted_block_returns_us_to_machine_provenance(db) -> None:
+    """Gate 1 is stronger when we fetch it than when a person swears to it, so
+    recovery must be automatic rather than waiting for someone to notice."""
+    from app.services import reg_watch
+
+    pack, source = _blocked_source(db)
+    # The same text the site will serve once it lets us in — otherwise the
+    # transition is a content change, and drift confirmation correctly holds it
+    # back for a second look rather than republishing.
+    reg_watch.supply_text(db, source, OFFICIAL_TEXT, attested_by="A. Operator")
+    db.flush()
+    assert source.check_mode == reg_watch.CHECK_MODE_MANUAL
+
+    source.next_check_at = None
+    changes = reg_watch.check_source(db, source, fetcher=_fetcher(OFFICIAL_TEXT))
+    db.commit()
+
+    assert source.check_mode == reg_watch.CHECK_MODE_AUTO
+    assert any(c.change_type == reg_watch.CHANGE_SOURCE_RECOVERED for c in changes)
+    # Future confirmations from this source now carry machine provenance...
+    assert reg_watch._published_status(source) == reg_watch.SOURCE_VERIFIED
+
+    # ...but the pack ALREADY published from the attestation keeps its weaker
+    # label. Relabelling it in place would be the promotion this whole design
+    # forbids: the version that was live on a given date was backed by a
+    # person's word, and that has to stay true afterwards.
+    published = (
+        db.query(reg_watch.RegulationPack)
+        .filter(reg_watch.RegulationPack.code == pack.code)
+        .order_by(reg_watch.RegulationPack.created_at.desc())
+        .first()
+    )
+    assert published.verification_status == reg_watch.ATTESTED_VERIFIED
+    assert "+av" in published.version

@@ -289,6 +289,12 @@ class RegulationSourceOut(BaseModel):
     last_status: str | None = None
     last_error: str | None = None
     consecutive_failures: int = 0
+    # "auto" = we fetch it. "manual" = a named person supplies the text, so
+    # Gate 1 rests on their attestation and not on a fetch by Attest.
+    check_mode: str = "auto"
+    attested_by: str | None = None
+    attested_at: str | None = None
+    attestation_note: str | None = None
 
 
 class WatchRunOut(BaseModel):
@@ -592,3 +598,22 @@ class PolicyOut(BaseModel):
     schema_version: int | None = None
     engine: str | None = None
     rules: dict[str, Any]
+
+
+class SupplyTextIn(BaseModel):
+    """Official text obtained by hand, for a source whose host refuses us.
+
+    `attested_by` is required and is the whole point: Gate 1 becomes a named
+    person's word rather than a fetch by Attest, so there must be a name on it.
+    """
+
+    pack_code: str = Field(min_length=1)
+    url: str = Field(min_length=1)
+    text: str = Field(min_length=1)
+    attested_by: str = Field(min_length=1, max_length=200)
+    note: str | None = Field(
+        default=None,
+        max_length=2000,
+        description="Where it came from — e.g. 'downloaded the PDF from difc.com'.",
+    )
+    auto_publish: bool = True

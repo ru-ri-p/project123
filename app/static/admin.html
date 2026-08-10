@@ -370,6 +370,27 @@
         <div id="rw-sources" style="margin-top:10px;"><div class="empty">Connect, then refresh.</div></div>
       </div>
 
+      <div class="card" id="supply-panel" style="display:none;margin-bottom:14px;border-color:var(--amberB);">
+        <div class="eyebrow" style="margin-bottom:8px;">SUPPLY OFFICIAL TEXT BY HAND</div>
+        <div class="banner amber" style="margin-bottom:12px;">
+          <b>This weakens provenance, on purpose and on the record.</b> Normally Attest fetches
+          the text itself. Here you are attesting that this is what the URL served — so anything
+          confirmed from it is published as <span class="mono">attested_verified</span> with an
+          <span class="mono">+av</span> version, never <span class="mono">source_verified</span>.
+          Your name, the date and the text hash are recorded, and the text is kept so anyone can
+          diff it against the live page. Paste only what the official page actually says.
+        </div>
+        <div class="kv2 mono" id="supply-target" style="margin-bottom:10px;"></div>
+        <input class="field" id="supply-by" placeholder="Your full name — this is the attestation"
+               style="margin-bottom:8px;">
+        <input class="field" id="supply-note" placeholder="Where you got it — e.g. downloaded the PDF from difc.com on 10 Aug 2026"
+               style="margin-bottom:8px;">
+        <textarea class="field" id="supply-text" rows="10" placeholder="Paste the official text here…"
+                  style="margin-bottom:10px;font-family:'IBM Plex Mono',monospace;font-size:12px;"></textarea>
+        <button class="btn primary" id="supply-save" style="margin:0;">Attest and run the gates</button>
+        <button class="btn" id="supply-cancel" style="margin:0 0 0 8px;">Cancel</button>
+      </div>
+
       <div class="card">
         <div class="row">
           <div class="eyebrow">CHANGES</div>
@@ -996,13 +1017,47 @@ function stateLabel(r) {
   return r.last_status || "unchecked";
 }
 
+let supplyTarget = null;
+function openSupply(packCode, url) {
+  supplyTarget = { pack_code: packCode, url };
+  $("#supply-target").textContent = `${packCode} — ${url}`;
+  $("#supply-text").value = ""; $("#supply-note").value = "";
+  $("#supply-panel").style.display = "";
+  $("#supply-panel").scrollIntoView({ behavior: "smooth", block: "start" });
+  $("#supply-by").focus();
+}
+$("#supply-cancel").addEventListener("click", () => {
+  $("#supply-panel").style.display = "none"; supplyTarget = null;
+});
+$("#supply-save").addEventListener("click", async () => {
+  if (!supplyTarget) return;
+  const attested_by = $("#supply-by").value.trim();
+  const text = $("#supply-text").value;
+  // An unattributed attestation is not an attestation — say so before the round trip.
+  if (!attested_by) { toast("Your name is required — it is the attestation.", "err"); return; }
+  if (!text.trim()) { toast("Paste the official text first.", "err"); return; }
+  const b = $("#supply-save"); b.disabled = true; b.textContent = "Running gates…";
+  try {
+    const changes = await api.call("/v1/admin/regulation-watch/sources/supply", {
+      method: "POST",
+      body: { ...supplyTarget, text, attested_by, note: $("#supply-note").value.trim() || null },
+    });
+    const published = changes.filter((c) => c.status === "auto_published").length;
+    toast(`Text attested. ${published} citation set(s) confirmed and published as attested_verified.`, "ok");
+    $("#supply-panel").style.display = "none"; supplyTarget = null;
+    loadWatchSources(); loadWatchChanges(); loadPacks();
+  } catch (e) { if (!handleAuthLoss(e)) toast("Supply failed: " + e.message, "err"); }
+  b.disabled = false; b.textContent = "Attest and run the gates";
+});
+
 async function loadWatchSources() {
   try {
     const rows = await api.call("/v1/admin/regulation-watch/sources");
     $("#rw-sources").innerHTML = rows.length ? `<table>
-      <thead><tr><th>PACK</th><th>OFFICIAL SOURCE</th><th>LAST CHECKED</th><th>NEXT DUE</th><th>STATE</th></tr></thead>
+      <thead><tr><th>PACK</th><th>OFFICIAL SOURCE</th><th>LAST CHECKED</th><th>NEXT DUE</th><th>STATE</th><th></th></tr></thead>
       <tbody>${rows.map((r) => {
-        const bad = r.last_error || (r.last_status && r.last_status !== "200");
+        const manual = r.check_mode === "manual";
+        const bad = !manual && (r.last_error || (r.last_status && r.last_status !== "200"));
         const due = !r.next_check_at || new Date(r.next_check_at) <= new Date();
         // A retired source is one no pack cites any more. Kept for the record,
         // never fetched — so its old error must not read as a live problem.
@@ -1011,17 +1066,25 @@ async function loadWatchSources() {
           <td class="mono" style="font-size:12px;">${esc(r.pack_code)}</td>
           <td><a href="${esc(r.url)}" target="_blank" rel="noopener"
                  style="color:var(--blue);font-size:12px;">${esc(r.url.slice(0, 64))}…</a>
-              ${r.content_hash ? `<div class="hash">snapshot ${esc(r.content_hash.slice(0,16))}…</div>` : ""}</td>
+              ${r.content_hash ? `<div class="hash">snapshot ${esc(r.content_hash.slice(0,16))}…</div>` : ""}
+              ${manual && r.attested_by ? `<div class="kv2" style="font-size:11px;">text attested by <b>${esc(r.attested_by)}</b>${r.attested_at ? ` · ${fmtT(r.attested_at)}` : ""}</div>` : ""}</td>
           <td class="kv2 mono">${r.last_checked_at ? fmtT(r.last_checked_at) : "never"}</td>
           <td class="kv2 mono">${off ? "—" : (due ? "due now" : fmtT(r.next_check_at))}</td>
           <td>${off
             ? '<span class="chip grey">NO LONGER CITED</span>'
+            : manual
+            ? `<span class="chip amber" title="${esc(r.attestation_note || "Text supplied by hand; this host refuses automated access.")}">ATTESTED BY HAND</span>`
             : `<span class="chip ${bad ? "red" : r.last_checked_at ? "blue" : "grey"}"
                      title="${esc((r.last_error || r.last_status || "")
                        + (r.consecutive_failures ? ` — ${r.consecutive_failures} consecutive failed checks` : ""))}">${
                 esc(stateLabel(r))}</span>`}</td>
+          <td style="text-align:right;white-space:nowrap;">${off ? "" : `
+            <button class="btn" data-supply="${esc(r.pack_code)}" data-url="${esc(r.url)}"
+              style="padding:4px 9px;font-size:11.5px;">${manual ? "Re-supply text" : "Supply text"}</button>`}</td>
         </tr>`;
       }).join("")}</tbody></table>` : '<div class="empty">No sources registered yet.</div>';
+    document.querySelectorAll("[data-supply]").forEach((b) =>
+      b.addEventListener("click", () => openSupply(b.dataset.supply, b.dataset.url)));
   } catch (e) { if (!handleAuthLoss(e)) toast("Sources failed: " + e.message, "err"); }
 }
 

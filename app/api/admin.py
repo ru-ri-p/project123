@@ -45,6 +45,7 @@ from app.schemas import (
     RegulationChangeOut,
     RegulationPackOut,
     RegulationSourceOut,
+    SupplyTextIn,
     TraceReplayOut,
     WatchRunOut,
 )
@@ -385,6 +386,10 @@ def list_watch_sources(db: Session = Depends(get_db)) -> list[RegulationSourceOu
             retired_at=s.retired_at.isoformat() if s.retired_at else None,
             last_status=s.last_status, last_error=s.last_error,
             consecutive_failures=s.consecutive_failures,
+            check_mode=s.check_mode,
+            attested_by=s.attested_by,
+            attested_at=s.attested_at.isoformat() if s.attested_at else None,
+            attestation_note=s.attestation_note,
         )
         # Live sources first; retired ones stay visible, because a URL we used to
         # cite is history worth being able to see, not something to hide.
@@ -393,6 +398,57 @@ def list_watch_sources(db: Session = Depends(get_db)) -> list[RegulationSourceOu
                   RegulationSource.pack_code)
         .all()
     ]
+
+
+def _change_out(c: RegulationChange) -> RegulationChangeOut:
+    return RegulationChangeOut(
+        id=str(c.id), pack_code=c.pack_code, url=c.url, change_type=c.change_type,
+        status=c.status, summary=c.summary, evidence=c.evidence or {},
+        published_version=c.published_version, created_at=c.created_at.isoformat(),
+    )
+
+
+@router.post("/regulation-watch/sources/supply", response_model=list[RegulationChangeOut])
+def supply_source_text(
+    body: SupplyTextIn, db: Session = Depends(get_db)
+) -> list[RegulationChangeOut]:
+    """Supply official text by hand for a source whose host refuses us.
+
+    difc.com and rulebook.centralbank.ae answer 429/403 to an honestly
+    identified fetch from a datacentre, so four of seven sources could never be
+    checked. A person obtains the text and attests where it came from.
+
+    GATE 1 IS WEAKER HERE and is recorded as such: provenance becomes "this
+    named person says the URL served this on this date", not "Attest fetched
+    it". Gates 2 and 3 are unchanged, and anything published carries
+    ATTESTED_VERIFIED with a +av version marker — never SOURCE_VERIFIED.
+    """
+    source = (
+        db.query(RegulationSource)
+        .filter(
+            RegulationSource.pack_code == body.pack_code,
+            RegulationSource.url == body.url,
+            RegulationSource.retired_at.is_(None),
+        )
+        .one_or_none()
+    )
+    if source is None:
+        # Gate 1 still admits nothing from an unregistered URL, however it
+        # arrives. A hand-supplied text is not a way around that.
+        raise HTTPException(
+            status_code=404,
+            detail="no live source registered for that pack and URL",
+        )
+    try:
+        changes = reg_watch.supply_text(
+            db, source, body.text,
+            attested_by=body.attested_by, note=body.note,
+            auto_publish=body.auto_publish,
+        )
+    except reg_watch.WatchError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    db.commit()
+    return [_change_out(c) for c in changes]
 
 
 @router.get("/regulation-watch/changes", response_model=list[RegulationChangeOut])
@@ -407,14 +463,7 @@ def list_watch_changes(
         .limit(max(1, min(limit, 500)))
         .all()
     )
-    return [
-        RegulationChangeOut(
-            id=str(c.id), pack_code=c.pack_code, url=c.url, change_type=c.change_type,
-            status=c.status, summary=c.summary, evidence=c.evidence or {},
-            published_version=c.published_version, created_at=c.created_at.isoformat(),
-        )
-        for c in rows
-    ]
+    return [_change_out(c) for c in rows]
 
 
 @router.post("/regulation-watch/changes/{change_id}/review", response_model=RegulationChangeOut)
@@ -431,12 +480,7 @@ def review_watch_change(
     change.reviewed_by = "attest_admin"
     change.reviewed_at = datetime.now(UTC)
     db.commit()
-    return RegulationChangeOut(
-        id=str(change.id), pack_code=change.pack_code, url=change.url,
-        change_type=change.change_type, status=change.status, summary=change.summary,
-        evidence=change.evidence or {}, published_version=change.published_version,
-        created_at=change.created_at.isoformat(),
-    )
+    return _change_out(change)
 
 
 # --- Profile change requests (the anti-evasion control) -----------------------

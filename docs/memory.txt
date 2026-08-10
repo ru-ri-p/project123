@@ -501,3 +501,55 @@ UNKNOWN UNTIL THE NEXT SWEEP: whether honest identification actually unblocks
 difc.com and centralbank.ae. It may not. If it does not, those three sources are
 manual-check-only and that should be stated in the pack notes rather than left
 as a permanently red queue.
+
+--------------------------------------------------------------------------------
+SESSION: 2026-08-10 (cont.) — Gate 1 gets a weaker second form
+--------------------------------------------------------------------------------
+Honest self-identification did NOT unblock the regulators. Live result after
+deploying fb260c5:
+
+  adgm_dp_regs 200 | uae_health_ai 200 | uae_onshore_core 200
+  cbuae_ai_consumer 403 | uae_fin_enabling_tech 403      (rulebook.centralbank.ae)
+  difc_dp_law_5_2020 429 | difc_dp_reg10 429             (www.difc.com)
+
+Failures group by HOST. Almost certainly datacentre-IP filtering, which no header
+can fix from Render. Founder's call: "if we cant scrape from those websites then
+maybe manually get them instead of being stuck at this again and again."
+
+BUILT: supply official text by hand (migration f31d84b6c05a).
+  - reg_watch.supply_text(): a named person supplies the text and attests where
+    it came from. GATE 1 BECOMES THEIR WORD, not our fetch — recorded as
+    check_mode/attested_by/attested_at/attestation_note plus the text hash, with
+    the snapshot retained so anyone can diff it against the live page.
+  - GATES 2 AND 3 ARE UNCHANGED and share ONE implementation with the fetched
+    path (_evaluate_snapshot). The gates that prevent fabrication must never have
+    two implementations that can drift apart. A citation absent from supplied
+    text still does not publish — tested.
+  - Published as ATTESTED_VERIFIED with a +av version marker, never
+    SOURCE_VERIFIED / +sv. The threat model includes a malicious insider on OUR
+    side, so a claim resting on an employee's word must not look identical to one
+    the machine fetched. Never promoted, either direction.
+  - An attestation with no name is refused, in the UI and in the service.
+  - Gate 1 still admits nothing from an unregistered URL: supplying text for a
+    URL no pack cites is a 404. Hand supply is not a way around provenance.
+  - Weekly re-probe. A lifted block returns the source to auto on its own and
+    records CHANGE_SOURCE_RECOVERED. A probe that STILL fails records nothing —
+    re-reddening a queue about a handled condition is how it becomes noise.
+  - Packs already published from an attestation KEEP the weaker label. Upgrading
+    in place would break the record of what was live on a given date.
+
+UI: /admin -> Regulation Watch -> "Supply text" per source row. The panel states
+outright that this weakens provenance and names both statuses. Sources show
+ATTESTED BY HAND with the attestor and date.
+
+Tests: +6 unit, +1 browser suite (scripts/supply_e2e.py — ELEVEN suites now).
+191 passed. regwatch_e2e updated with the new invariant: every +av pack is
+attested_verified and never source_verified (10 checked live).
+
+TWO OF MY BUGS FOUND BY THE E2E, BOTH FIXED
+  - api.call already JSON.stringify's the body; I passed a pre-stringified body,
+    so the server got a JSON string and 422'd.
+  - regwatch_e2e's allowed-status list did not include the new status.
+
+NOTE: running eleven E2E suites back to back trips OUR OWN rate limiter (120
+req/60s). Space them out or wait on /v1/admin/ping returning 200.

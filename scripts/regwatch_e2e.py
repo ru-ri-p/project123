@@ -84,16 +84,25 @@ def main() -> None:
 
     # The sweep must never have invented a citation into any pack.
     packs = rq.get(f"{BASE}/v1/admin/regulation-packs", headers=A).json()
-    for pack in packs:
-        ok(pack["verification_status"] in ("unverified", "source_verified", "counsel_reviewed"),
-           f"{pack['code']} carries an honest verification status")
+    honest = ("unverified", "source_verified", "attested_verified", "counsel_reviewed")
+    bad = [p for p in packs if p["verification_status"] not in honest]
+    ok(not bad, f"every pack carries an honest verification status "
+                f"({len(packs)} checked; bad: {[p['code'] for p in bad]})")
+
     # The meaningful check is not "no pack is counsel-reviewed" (a human may
     # legitimately mark one), but that nothing the WATCHER published claims it.
-    # Watcher-published versions carry the +sv suffix.
-    watcher_published = [p for p in packs if "+sv" in p["version"]]
-    ok(all(p["verification_status"] == "source_verified" for p in watcher_published),
-       f"every watcher-published pack is source_verified, never promoted "
-       f"({len(watcher_published)} checked)")
+    # Watcher-published versions carry +sv (we fetched the text) or +av (a person
+    # attested it). Neither may ever be the other, and neither may be promoted.
+    fetched = [p for p in packs if "+sv" in p["version"]]
+    ok(all(p["verification_status"] == "source_verified" for p in fetched),
+       f"every fetched-and-confirmed pack is source_verified, never promoted "
+       f"({len(fetched)} checked)")
+
+    attested = [p for p in packs if "+av" in p["version"]]
+    ok(all(p["verification_status"] == "attested_verified" for p in attested),
+       f"every pack confirmed from hand-supplied text is attested_verified — "
+       f"never source_verified, which would claim Attest fetched it "
+       f"({len(attested)} checked)")
 
     print("\nALL REGWATCH E2E CHECKS PASSED")
 

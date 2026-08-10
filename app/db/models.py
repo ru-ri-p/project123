@@ -400,6 +400,20 @@ class RegulationSource(Base):
     consecutive_failures: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default="0"
     )
+    # "auto" — we fetch it ourselves (Gate 1 is a machine guarantee).
+    # "manual" — the host refuses automated clients, so a named person supplied
+    # the official text and attested where it came from. Gate 1 then rests on
+    # that attestation, NOT on our fetch, and anything published from it is
+    # labelled distinctly so the two can never be confused.
+    check_mode: Mapped[str] = mapped_column(
+        String(16), nullable=False, server_default="auto"
+    )
+    attested_by: Mapped[str | None] = mapped_column(Text, nullable=True)
+    attested_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # Where the person says they got it — the audit trail for a human Gate 1.
+    attestation_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
