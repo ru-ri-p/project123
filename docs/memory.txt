@@ -386,3 +386,57 @@ way, and is not evidence about which code is running.
 Tests: +3 in test_reg_watch.py (corrected URL retires the dead one and does not
 resurrect on re-run; a retired source keeps its snapshot and hash; citing a URL
 again brings it back). 181 passed; all ten E2E suites pass.
+
+--------------------------------------------------------------------------------
+SESSION: 2026-08-10 — the deploy that never deployed
+--------------------------------------------------------------------------------
+Founder returned after a break, deployed "latest commit" on Render, and the new
+code still was not live. Root cause was NOT Render and NOT a browser cache.
+
+THE PIPELINE HAS FOUR STEPS, NOT TWO
+  feature branch -> main -> mirror Action -> ru-ri-p/project123 -> Render deploy
+Work had been pushed only to claude/zealous-archimedes-8i4x3i, per the branch
+instruction. The mirror workflow fires on push to MAIN only. main was stuck at
+2d6c76c, so the deploy repo was stuck at 2d6c76c, so Render honestly deployed
+"the latest commit" — of code three commits old. Mirror run #20 (4 Aug) was the
+last one until this session.
+
+FIX: fast-forwarded main to 99d05cb (clean, no merge commit) with the founder's
+explicit go-ahead, pushed, mirror run #21 succeeded, then the Render deploy took.
+
+RULE FOR EVERY FUTURE SESSION: a push to the feature branch is NOT deployable.
+main must move too, or nothing reaches Render. Say so explicitly every time work
+is described as "pushed". This is the same two-repo split that cost ~2 days in
+August; it bit again, the same way. Consolidating the repos should move up the
+list once the pilot is moving.
+
+SECOND FIND: PRODUCTION WAS CARRYING ONLY 4 OF 7 PACKS
+The first live sweep reported "checked 4 of 4". There are seven packs in code.
+Production had been seeded before the jurisdiction layer existed and never
+re-seeded, so it was missing uae_fin_enabling_tech, cbuae_ai_consumer and
+uae_health_ai. Material for the pilot: for TradeEasy's profile (DIFC x capital
+markets) the derived set should be difc_dp_reg10 + difc_dp_law_5_2020 +
+uae_fin_enabling_tech, and the missing one is the JOINT CBUAE/SCA/DFSA/FSRA
+enabling-technologies guidance — the pack most directly about financial
+institutions adopting AI. They would have onboarded with 2 of their 3 rulebooks.
+
+It also explained why the corrected ADGM URL had not taken effect: production
+still held the OLD pack row, so its dead URL was still "current" and the
+retirement logic correctly kept fetching it.
+
+Re-seeded from the Render shell (DB-level call, no admin key needed — see below):
+packs 7, new sources 4, dead ADGM URL now RETIRED, corrected one LIVE. Next
+sweep read "checked 4 of 7" — the four new sources due immediately, the three
+already-checked ones not due until tomorrow. Scheduling behaving exactly right.
+
+MY ERROR WORTH NOT REPEATING: told the founder to run
+  curl -X POST -H "x-admin-key: $ADMIN_API_KEY" ...
+on their Mac. That variable lives in RENDER's environment, not on a laptop, so
+the header went out empty and the call silently 401'd. Prefer the Render-shell
+python form for anything admin-keyed — it talks to the DB directly and there is
+no key to get wrong. There is also no curl installed in that container.
+
+STILL OPEN: which 2 of the 4 newly-checked sources quarantined and why (a 404
+would be another genuinely dead link, like ADGM's). Then TradeEasy onboarding.
+Also worth building: the ops dashboard should warn "4 of 7 packs seeded" rather
+than making an operator infer it from a sweep count.
