@@ -259,6 +259,29 @@ def list_regulation_packs(
     return [_admin_pack_out(p) for p in pack_service.list_packs(db, jurisdiction)]
 
 
+@router.get("/regulation-packs/coverage")
+def pack_coverage(db: Session = Depends(get_db)) -> dict[str, object]:
+    """Which bundled packs this deployment is actually carrying.
+
+    Production once ran with four of seven packs — seeded before the later ones
+    existed and never re-seeded — and the only symptom was a sweep reporting a
+    smaller total than expected. A customer whose profile derives a missing pack
+    silently gets fewer obligations than they should, which is the one failure
+    this whole layer exists to prevent. So it is stated, not inferred.
+    """
+    from app.domain.regulation_packs import BUILTIN_PACKS
+
+    have = {p.code for p in db.query(RegulationPack)}
+    expected = [p["code"] for p in BUILTIN_PACKS]
+    missing = [code for code in expected if code not in have]
+    return {
+        "expected": len(expected),
+        "seeded": len(expected) - len(missing),
+        "missing": missing,
+        "complete": not missing,
+    }
+
+
 def _admin_pack_out(pack: RegulationPack) -> RegulationPackOut:
     doc = pack.rules if isinstance(pack.rules, dict) else {}
     rules = doc.get("rules", [])
@@ -361,6 +384,7 @@ def list_watch_sources(db: Session = Depends(get_db)) -> list[RegulationSourceOu
             next_check_at=s.next_check_at.isoformat() if s.next_check_at else None,
             retired_at=s.retired_at.isoformat() if s.retired_at else None,
             last_status=s.last_status, last_error=s.last_error,
+            consecutive_failures=s.consecutive_failures,
         )
         # Live sources first; retired ones stay visible, because a URL we used to
         # cite is history worth being able to see, not something to hide.

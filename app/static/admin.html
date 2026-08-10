@@ -314,6 +314,7 @@
         official texts, and have not been reviewed by counsel. Every finding is labelled with its
         verification status. Do not present them to a customer as settled legal positions.
       </div>
+      <div class="banner red" id="packs-coverage" style="margin-bottom:18px;display:none;"></div>
       <div class="card" style="margin-bottom:14px;">
         <div class="row">
           <div class="eyebrow">PUBLISHED PACKS</div>
@@ -869,6 +870,21 @@ async function loadPacks() {
       try { orgsCache = await api.call("/v1/admin/orgs"); } catch (e) { /* shown elsewhere */ }
     }
     packsCache = await api.call("/v1/admin/regulation-packs");
+    // Say it outright when this deployment is carrying fewer packs than exist.
+    // A customer whose profile derives a missing pack silently gets fewer
+    // obligations than they should — the exact failure this layer prevents.
+    try {
+      const cov = await api.call("/v1/admin/regulation-packs/coverage");
+      const warn = $("#packs-coverage");
+      if (cov.complete) { warn.style.display = "none"; }
+      else {
+        warn.style.display = "";
+        warn.innerHTML = `<b>Only ${cov.seeded} of ${cov.expected} packs are published here.</b>
+          Missing: <span class="mono">${cov.missing.map(esc).join(", ")}</span>.
+          A customer whose profile derives one of these is currently carrying fewer obligations
+          than they should. Click <b>Publish starter packs</b> to fix it.`;
+      }
+    } catch (e) { /* coverage is advisory; never block the pack list on it */ }
     const box = $("#packlist");
     if (!packsCache.length) {
       box.innerHTML = '<div class="empty">No packs published yet — use “Publish starter packs”.</div>';
@@ -961,12 +977,15 @@ async function runWatch(publish) {
 // what happened and the full text sits in the tooltip.
 function stateLabel(r) {
   if (!r.last_checked_at) return "unchecked";
+  // A rate limit that never clears is bot protection, not congestion. Saying
+  // "will retry" about a wall trains the operator to ignore this table.
+  const stuck = (r.consecutive_failures || 0) >= 3;
   if (r.last_status && r.last_status !== "error") {
     const n = Number(r.last_status);
     if (n === 200) return "200";
     if (n === 404 || n === 410) return `HTTP ${n} · GONE?`;
     if (n === 401 || n === 403) return `HTTP ${n} · BLOCKED`;
-    if (n === 429) return "HTTP 429 · RATE LIMITED";
+    if (n === 429) return stuck ? "HTTP 429 · BLOCKED" : "HTTP 429 · RATE LIMITED";
     return `HTTP ${n}`;
   }
   const e = (r.last_error || "").toLowerCase();
@@ -998,7 +1017,8 @@ async function loadWatchSources() {
           <td>${off
             ? '<span class="chip grey">NO LONGER CITED</span>'
             : `<span class="chip ${bad ? "red" : r.last_checked_at ? "blue" : "grey"}"
-                     title="${esc(r.last_error || r.last_status || "")}">${
+                     title="${esc((r.last_error || r.last_status || "")
+                       + (r.consecutive_failures ? ` — ${r.consecutive_failures} consecutive failed checks` : ""))}">${
                 esc(stateLabel(r))}</span>`}</td>
         </tr>`;
       }).join("")}</tbody></table>` : '<div class="empty">No sources registered yet.</div>';

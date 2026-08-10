@@ -288,6 +288,7 @@ class RegulationSourceOut(BaseModel):
     retired_at: str | None = None
     last_status: str | None = None
     last_error: str | None = None
+    consecutive_failures: int = 0
 
 
 class WatchRunOut(BaseModel):

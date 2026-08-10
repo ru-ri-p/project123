@@ -440,3 +440,64 @@ STILL OPEN: which 2 of the 4 newly-checked sources quarantined and why (a 404
 would be another genuinely dead link, like ADGM's). Then TradeEasy onboarding.
 Also worth building: the ops dashboard should warn "4 of 7 packs seeded" rather
 than making an operator infer it from a sweep count.
+
+--------------------------------------------------------------------------------
+SESSION: 2026-08-10 (cont.) — the 429 was never a rate limit
+--------------------------------------------------------------------------------
+Per-source status from the live deployment, after seeding all seven packs:
+
+  adgm_dp_regs           200    <- the URL correction works, confirmed live
+  uae_health_ai          200
+  uae_onshore_core       200
+  cbuae_ai_consumer      403    <- rulebook.centralbank.ae
+  uae_fin_enabling_tech  403    <- rulebook.centralbank.ae (same host)
+  difc_dp_law_5_2020     429    <- www.difc.com
+  difc_dp_reg10          429    <- www.difc.com
+
+NO 404s ANYWHERE. No pack cites a dead page. The pilot is not blocked by this.
+
+A CORRECTION I HAD TO MAKE TO THE FOUNDER: I had told them the pacing fix worked
+because a sweep showed no 429 from difc.com. Wrong — that sweep only checked the
+four NEW sources and never touched the DIFC ones. The DIFC 429s are from the
+first sweep, where both WERE fetched, six seconds apart, with retries honouring
+Retry-After. They still 429'd. Read what a run actually covered before drawing a
+conclusion from it.
+
+THE REAL DIAGNOSIS: failures group by HOST, not by frequency. Both centralbank.ae
+URLs 403, both difc.com URLs 429, on the first request of the day. A rate limit
+that fires immediately, after pacing and retries, is not a rate limit — it is bot
+protection, and politeness cannot fix it. The pacing work was still correct (it
+stops us hammering anyone) but it was aimed at the wrong cause.
+
+FIX CHOSEN BY THE FOUNDER: identify ourselves honestly.
+  - request_headers() is now the single definition of how we present ourselves:
+    a descriptive agent naming Attest with a contact URL (REGWATCH_USER_AGENT),
+    plus truthful Accept / Accept-Language headers whose absence is itself a
+    scraper signal.
+  - EXPLICITLY NOT browser impersonation. A test asserts the UA contains no
+    mozilla/chrome/safari/webkit/gecko. If a regulator refuses an honestly
+    identified client, that is their decision; we record source_blocked, say it
+    tells us nothing about the instrument, and a person checks by hand.
+
+SECOND FIX (migration e5a72c19d834, regulation_sources.consecutive_failures):
+a persistent 429 is no longer described as transient. One 429 really might be
+congestion; PERSISTENT_FAILURE_THRESHOLD (3) consecutive ones get reclassified as
+CHANGE_SOURCE_BLOCKED with "a rate limit that never clears is bot protection".
+Any success resets the streak to 0. A 404 is NEVER softened by this logic — it is
+evidence about the instrument and must keep saying so. The ops chip reads
+HTTP 429 · BLOCKED once stuck, with the streak in the tooltip.
+
+THIRD: GET /v1/admin/regulation-packs/coverage + a red banner on the Packs screen
+naming exactly which bundled packs are missing. Production ran with 4 of 7 and
+the only symptom was a sweep total — an operator should never have to infer that.
+
+Tests: +4 (honest self-identification incl. the no-impersonation assertion;
+persistent 429 reclassified; success clears the streak; 404 never softened).
+185 passed; all ten E2E suites pass; ruff clean; mypy at the same pre-existing 7.
+Also fixed a test that asserted on URLs globally rather than scoping to its own
+pack — leftover rows in the shared dev DB made it flaky.
+
+UNKNOWN UNTIL THE NEXT SWEEP: whether honest identification actually unblocks
+difc.com and centralbank.ae. It may not. If it does not, those three sources are
+manual-check-only and that should be stated in the pack notes rather than left
+as a permanently red queue.

@@ -83,6 +83,12 @@ STATUS_ACTIONED = "actioned"
 # Reproducibility passes required before a claim may be published (Gate 3).
 REPRODUCIBILITY_RUNS = 3
 
+# Consecutive failures after which a "transient" failure stops being described as
+# transient. Three days of the same answer is a wall, not a blip.
+PERSISTENT_FAILURE_THRESHOLD = int(
+    os.environ.get("REGWATCH_PERSISTENT_FAILURE_THRESHOLD", "3")
+)
+
 # --- politeness ---------------------------------------------------------------
 # difc.com returned 429 to two near-simultaneous fetches on the first live sweep:
 # two packs cite the same host, and we asked for both at once. The answer has two
@@ -171,6 +177,15 @@ class WatchError(RuntimeError):
     """The watcher could not run. Never raised for a mere source change."""
 
 
+def _streak_note(source: RegulationSource) -> str:
+    """Say how long this has been failing. One failure and a fortnight of them
+    need different responses from the operator, so do not report them alike."""
+    n = source.consecutive_failures
+    if n < 2:
+        return ""
+    return f" Failed {n} consecutive checks."
+
+
 # --- normalisation & hashing --------------------------------------------------
 
 
@@ -213,10 +228,42 @@ def content_hash(text: str) -> str:
 # --- GATE 1: provenance -------------------------------------------------------
 
 
+# How we introduce ourselves to a regulator's website.
+#
+# The first live sweeps showed the failures grouping by HOST, not by frequency:
+# both centralbank.ae URLs returned 403 and both difc.com URLs returned 429, on
+# the first request of the day, six seconds apart, after retries. That is not a
+# rate limit — it is bot protection declining to serve something that does not
+# look like a browser, and no amount of politeness fixes it.
+#
+# So we identify ourselves the way a well-behaved crawler does: a descriptive
+# agent naming the operator and a contact URL, so a site owner can recognise us
+# and allow-list us if they choose. We do NOT pretend to be a browser. If a
+# regulator refuses automated access to an honestly-identified client, that is
+# their decision to make; we record source_blocked, state plainly that it says
+# nothing about the instrument, and a person checks the page by hand.
+DEFAULT_USER_AGENT = os.environ.get(
+    "REGWATCH_USER_AGENT",
+    "AttestRegulationWatch/1.0 (compliance monitoring; +https://attest.ae/regwatch)",
+)
+# Truthful about what we can parse. Their absence is itself a scraper signal.
+DEFAULT_HEADERS = {
+    "Accept": "text/html,application/xhtml+xml,application/pdf;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-GB,en;q=0.9,ar;q=0.8",
+}
+FETCH_TIMEOUT = float(os.environ.get("REGWATCH_FETCH_TIMEOUT_SECONDS", "30"))
+
+
+def request_headers(user_agent: str | None = None) -> dict[str, str]:
+    """The headers every regulation fetch carries. One definition, so the live
+    fetcher and the tests can never disagree about how we present ourselves."""
+    return {"User-Agent": user_agent or DEFAULT_USER_AGENT, **DEFAULT_HEADERS}
+
+
 def _http_get(url: str) -> tuple[int, str, dict[str, str]]:
     import requests
 
-    response = requests.get(url, timeout=30, headers={"User-Agent": "attest-regwatch/1"})
+    response = requests.get(url, timeout=FETCH_TIMEOUT, headers=request_headers())
     return response.status_code, response.text, dict(response.headers)
 
 
@@ -443,13 +490,20 @@ def check_source(
         source.last_checked_at = now
         source.last_status = "error"
         source.last_error = str(exc)[:500]
+        source.consecutive_failures += 1
         db.flush()
         return [
             _record_change(
                 db, pack_code=source.pack_code, url=source.url,
                 change_type=CHANGE_FETCH_FAILED, status=STATUS_QUARANTINED,
-                summary=f"Could not fetch the official source: {exc}",
-                evidence={"error": str(exc)[:500]},
+                summary=(
+                    f"Could not fetch the official source: {exc}"
+                    f"{_streak_note(source)}"
+                ),
+                evidence={
+                    "error": str(exc)[:500],
+                    "consecutive_failures": source.consecutive_failures,
+                },
             )
         ]
 
@@ -462,7 +516,9 @@ def check_source(
         # withdrawn" for a rate limit is simply false. Only 404/410 is evidence
         # about the instrument; the rest is evidence about the fetch.
         source.last_error = f"HTTP {status_code}"
+        source.consecutive_failures += 1
         db.flush()
+        persistent = source.consecutive_failures >= PERSISTENT_FAILURE_THRESHOLD
         if status_code in (404, 410):
             change_type, summary = CHANGE_SOURCE_GONE, (
                 f"Official source returned HTTP {status_code}. The pack may be citing "
@@ -474,6 +530,16 @@ def check_source(
                 f"says nothing about the instrument — the site is blocking the fetch. "
                 f"Check the URL by hand, or supply the text another way."
             )
+        elif status_code == 429 and persistent:
+            # A rate limit that fires on every first-of-the-day request, after
+            # pacing and retries, is not a rate limit. Calling it transient
+            # forever would train the operator to ignore this queue.
+            change_type, summary = CHANGE_SOURCE_BLOCKED, (
+                f"Official source has returned HTTP 429 on {source.consecutive_failures} "
+                f"consecutive checks. A rate limit that never clears is bot protection, "
+                f"not congestion — this site does not serve automated clients. It says "
+                f"nothing about the instrument; check the URL by hand."
+            )
         else:
             change_type, summary = CHANGE_SOURCE_UNAVAILABLE, (
                 f"Official source was temporarily unavailable (HTTP {status_code}"
@@ -484,9 +550,16 @@ def check_source(
             _record_change(
                 db, pack_code=source.pack_code, url=source.url,
                 change_type=change_type, status=STATUS_QUARANTINED,
-                summary=summary, evidence={"status_code": status_code},
+                summary=summary + _streak_note(source),
+                evidence={
+                    "status_code": status_code,
+                    "consecutive_failures": source.consecutive_failures,
+                },
             )
         ]
+
+    # Reached the page: whatever was wrong before has cleared.
+    source.consecutive_failures = 0
 
     new_hash = content_hash(text)
     previous_hash = source.content_hash

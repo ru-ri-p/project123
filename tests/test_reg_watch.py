@@ -580,8 +580,10 @@ def test_a_corrected_source_url_retires_the_dead_one(db) -> None:
     assert by_url[good].retired_at is None, "the corrected URL is live"
     assert by_url[dead].retired_at is not None, "the dead one is retired"
 
-    # And crucially: never fetched again, however overdue it looks.
-    due = {s.url for s in reg_watch.due_sources(db, limit=0)}
+    # And crucially: never fetched again, however overdue it looks. Scoped to
+    # this pack — the shared dev database carries rows from earlier runs, and a
+    # global URL match would assert about those instead.
+    due = {s.url for s in reg_watch.due_sources(db, limit=0) if s.pack_code == code}
     assert good in due and dead not in due
 
     # Re-running must not resurrect it — this is what looped before.
@@ -648,3 +650,95 @@ def test_a_pack_citing_a_url_again_brings_it_back(db) -> None:
     db.flush()
     live = {s.url for s in _sources(db, code) if s.retired_at is None}
     assert live == {a}, "the original comes back live, and b retires"
+
+
+# --- bot protection is not congestion -----------------------------------------
+
+
+def test_we_identify_ourselves_honestly_to_regulators() -> None:
+    """Both centralbank.ae URLs 403'd and both difc.com URLs 429'd on the first
+    request of the day, after pacing and retries. That is bot protection, and the
+    honest response is to say who we are — not to impersonate a browser."""
+    from app.services.reg_watch import request_headers
+
+    h = request_headers()
+    ua = h["User-Agent"]
+    assert "Attest" in ua, "the operator must be nameable from the log line"
+    assert "+http" in ua, "and reachable, so a site owner can allow-list us"
+    assert h["Accept"], "absent Accept headers are themselves a scraper signal"
+    lowered = ua.lower()
+    for pretend in ("mozilla", "chrome", "safari", "webkit", "gecko"):
+        assert pretend not in lowered, (
+            "we must never pose as a browser to get around a block — if a "
+            "regulator refuses an honestly-identified client, that is their call"
+        )
+
+
+def test_a_persistent_429_stops_being_called_transient(db) -> None:
+    """Reporting 'transient, will retry' every day about a permanent block is how
+    a quarantine queue becomes something nobody reads."""
+    from app.services import reg_watch
+
+    pack = _pack(db)
+    reg_watch.register_sources(db)
+    source = next(s for s in _sources(db, pack.code))
+
+    summaries = []
+    for _ in range(reg_watch.PERSISTENT_FAILURE_THRESHOLD):
+        source.next_check_at = None
+        changes = reg_watch.check_source(
+            db, source, fetcher=_fetcher("", status=429), auto_publish=False
+        )
+        summaries.append(changes[0])
+    db.flush()
+
+    first, last = summaries[0], summaries[-1]
+    assert first.change_type == reg_watch.CHANGE_SOURCE_UNAVAILABLE
+    assert "Transient" in first.summary, "one 429 really might be congestion"
+
+    assert last.change_type == reg_watch.CHANGE_SOURCE_BLOCKED, (
+        "a rate limit that never clears is bot protection"
+    )
+    assert "Transient" not in last.summary
+    assert "bot protection" in last.summary
+    assert source.consecutive_failures == reg_watch.PERSISTENT_FAILURE_THRESHOLD
+    assert last.evidence["consecutive_failures"] == source.consecutive_failures
+
+
+def test_reaching_the_page_clears_the_streak(db) -> None:
+    """Otherwise a site that recovers is libelled as blocked forever."""
+    from app.services import reg_watch
+
+    pack = _pack(db)
+    reg_watch.register_sources(db)
+    source = next(s for s in _sources(db, pack.code))
+
+    for _ in range(4):
+        source.next_check_at = None
+        reg_watch.check_source(db, source, fetcher=_fetcher("", status=429),
+                               auto_publish=False)
+    assert source.consecutive_failures == 4
+
+    source.next_check_at = None
+    reg_watch.check_source(db, source, fetcher=_fetcher(OFFICIAL_TEXT), auto_publish=False)
+    db.flush()
+    assert source.consecutive_failures == 0, "a success is a clean slate"
+
+
+def test_a_404_is_never_softened_by_the_streak_logic(db) -> None:
+    """A dead link is evidence about the INSTRUMENT, and must keep saying so
+    however many times we have seen it."""
+    from app.services import reg_watch
+
+    pack = _pack(db)
+    reg_watch.register_sources(db)
+    source = next(s for s in _sources(db, pack.code))
+
+    for _ in range(reg_watch.PERSISTENT_FAILURE_THRESHOLD + 1):
+        source.next_check_at = None
+        changes = reg_watch.check_source(
+            db, source, fetcher=_fetcher("", status=404), auto_publish=False
+        )
+    db.flush()
+    assert changes[0].change_type == reg_watch.CHANGE_SOURCE_GONE
+    assert "withdrawn" in changes[0].summary
