@@ -595,3 +595,71 @@ uae_fin_enabling_tech; org search and the PROFILE column are live (fb260c5).
 b8f4fd2 (supply text) does NOT need deploying for the pilot — it is ops-side.
 Sent the founder ready-to-send email copy. Order remains: send quickstart ->
 they onboard -> verify profile_configured -> only THEN require-onboarding.
+
+--------------------------------------------------------------------------------
+SESSION: 2026-08-12/13 — production outage, recovery, and the pilot go-package
+--------------------------------------------------------------------------------
+TRADEEASY REPORTED: /v1/gate, /v1/traces, /v1/event all 500 on prod; an INVALID
+key also 500'd (their sharp observation — fails ahead of key validation);
+/health 200. Console failed with the valid key too.
+
+DIAGNOSIS (proved locally, not guessed): the auth path is open-session ->
+hash-key -> query Org; only the session can throw. DB up = 401 on bad key,
+DB down = 500 everywhere while /health stays 200 (health never touches DB).
+Root cause: Render FREE-TIER POSTGRES — free instances EXPIRE (~30 days).
+Founder paid: Basic-256mb $6/mo + $0.30/GB storage; DB was suspended, not
+deleted; data survived. Realistic cost analysis done: ~1KB/event chain,
+~6-8KB per gated output all-in; Basic-256mb fine until real multi-customer
+volume; payloads prunable via retention while the chain keeps forever.
+
+SECOND FAULT, MINE: the quickstart told TradeEasy to pip install from
+git+https://github.com/shaundytradesfx/govproject01 — a PRIVATE repo they can
+never clone. Fixed by building the wheel (attest_sdk-0.1.0-py3-none-any.whl,
+verified in a fresh venv) and sending it to the founder. Founder proposed making
+the repo public; REFUSED with evidence — docs/memory.txt line ~150 contains the
+live pilot API key, so public = publishing a working credential (git history
+keeps it even after deletion), plus the repo is the whole product. Right shapes
+later: separate public SDK-only repo, or PyPI. Raw HTTP POST /v1/gate is fully
+supported and was offered to TradeEasy as an SDK-free path.
+
+TOOLS ADDED (all require deploy to be usable in the Render shell):
+  - scripts/diagnose_prod.py — one-shot verdict: DB reachable? schema version?
+    org present? does PILOT_KEY resolve? (key via env only, never in code)
+  - scripts/export_backup_md.py — Markdown SNAPSHOT of the whole DB (orgs,
+    profiles, full pack rules, sources+attestations, event chain with hashes/
+    signatures, anchors, consent trail). A record, NOT a restore image; pg_dump/
+    Render Backups tab is the restorable copy. Envelopes and key hashes omitted.
+  - Founder took the backup and enabled paid daily backups.
+
+RENDER SHELL GOTCHAS LEARNED: no curl in the container; an open shell stays
+attached to the OLD container after a deploy (hostname hash is the tell —
+close and reopen); scripts don't exist in the container until deployed.
+
+PILOT GO-PACKAGE SHIPPED:
+  - docs/TRADEEASY_TEST_PLAN.md then superseded by docs/TRADEEASY_PILOT_GUIDE.md
+    — ONE forwardable end-to-end doc: setup (wheel, console onboarding, keys),
+    scripted tests 1-5+7 as a single attest_tests.py, test 3b (edit own rule in
+    console, verdict changes), test 6 consent choreography (DECLINE FIRST, we
+    confirm in writing we read nothing), results table, raw-HTTP alternative,
+    and the honest scope note. Committed copy carries a PLACEHOLDER key.
+  - EVERY expectation verified against the running code before it went in the
+    doc: clean->compliant; email in output trips has_pii -> flagged with DIFC
+    citation, NOT blocked; execute_trade -> blocked BY THEIR OWN starter policy;
+    replay all_verified True. Triggers confirmed from source: packs match on
+    has_pii / classifier / action[wire_transfer,execute_trade]; starter policy
+    denies those two actions and flags PII.
+
+SCOPE ANSWER GIVEN TO FOUNDER (worth repeating verbatim in future): Attest
+covers every output routed through gate(), provably; it CANNOT see AI actions
+never sent to it. Coverage of a customer's AI estate is their integration
+decision. Future roadmap idea: reconciliation ("you told us N workflows; we see
+events from 3").
+
+RECURRING ENVIRONMENT NUISANCE: this build container re-clones the repo at a
+stale commit MID-SESSION; three commits landed on stale bases and needed
+cherry-pick onto origin. Always `git fetch && checkout -B branch origin/branch`
+before committing. Remote was never at risk.
+
+STATE AT END: prod healthy (paid DB, backed up), fb260c5+ deployed, pilot guide
+fc812a2 on both branches, wheel with founder, founder about to send the go-
+package. Waiting on TradeEasy's results table.
