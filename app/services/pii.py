@@ -10,7 +10,9 @@ PATTERNS: dict[str, re.Pattern[str]] = {
     "emirates_id": re.compile(r"\b784-?\d{4}-?\d{7}-?\d\b"),
     "iban_ae": re.compile(r"\bAE\d{2}\d{3}\d{16}\b"),
     "email": re.compile(r"\b[\w.+-]+@[\w-]+\.[\w.-]+\b"),
-    "phone_ae": re.compile(r"\b(?:\+?971|0)5\d{8}\b"),
+    # Humans write numbers with separators: +971 50 123 4567, 050-123-4567.
+    # Matching only the unbroken form missed the common case entirely.
+    "phone_ae": re.compile(r"\b(?:\+?971[\s-]?|0)5\d[\s-]?\d{3}[\s-]?\d{4}\b"),
 }
 
 

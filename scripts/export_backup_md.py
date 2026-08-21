@@ -104,7 +104,8 @@ def main() -> int:
         profiles = {p.org_id: p for p in db.query(OrgProfile)}
         rows = db.query(Org).order_by(Org.created_at).limit(MAX_ORGS).all()
         total = db.query(Org).count()
-        print("| id | name | region | mode | requires_profile | jurisdictions | sectors | created |")
+        print("| id | name | region | mode | requires_profile "
+              "| jurisdictions | sectors | created |")
         print("|---|---|---|---|---|---|---|---|")
         for o in rows:
             p = profiles.get(o.id)
@@ -141,7 +142,8 @@ def main() -> int:
         print("| pack | url | mode | content_hash | attested_by | retired |")
         print("|---|---|---|---|---|---|")
         for s in db.query(RegulationSource).order_by(RegulationSource.pack_code):
-            print(f"| {cell(s.pack_code)} | {cell(s.url)} | {cell(getattr(s, 'check_mode', 'auto'))} "
+            mode = cell(getattr(s, "check_mode", "auto"))
+            print(f"| {cell(s.pack_code)} | {cell(s.url)} | {mode} "
                   f"| {cell((s.content_hash or '')[:16])} | {cell(s.attested_by)} "
                   f"| {'yes' if s.retired_at else ''} |")
         print("\n> Text snapshots omitted for size; content hashes above identify them.")

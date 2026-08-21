@@ -42,7 +42,10 @@ def rule_matches(
         if features.prohibited_phrases:
             return True
     if feature_key == "classifier":
-        hint = payload.get("_classifier_tier")
+        # Accept the documented field name as well as the legacy underscore
+        # hint. Rules matching only a field no document ever mentioned could
+        # never fire from a real customer payload.
+        hint = payload.get("classifier") or payload.get("_classifier_tier")
         if hint and match.get("equals") == hint:
             return True
 

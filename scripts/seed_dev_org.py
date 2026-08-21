@@ -44,6 +44,12 @@ def main() -> None:
                         api_key_hash=hash_api_key(spec["api_key"]),
                         region=spec["region"],
                         fail_mode=spec["fail_mode"],
+                        # These stand in for customers that predate the
+                        # onboarding gate. On a rebuilt-from-scratch dev
+                        # database they would otherwise be created as NEW orgs
+                        # and gated (409 profile_required), which fails every
+                        # legacy-path test for an environmental reason.
+                        requires_profile=False,
                     )
                 )
                 print(f"Created org '{spec['id']}'.")

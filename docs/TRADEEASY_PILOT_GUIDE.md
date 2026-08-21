@@ -249,3 +249,52 @@ send it. Which of your AI workflows get wired in is your decision, and for the
 pilot the scope is whatever you choose to connect.
 
 Questions or anything unexpected: reply to the email this came with.
+
+---
+
+# Appendix — Rulebook trigger catalogue (Test 8, optional but recommended)
+
+"How do I know an output gets flagged under the rules assigned to us?" — by
+firing a known trigger for **every rule** in your derived rulebooks and watching
+each one flag, with its citation. Every row below was verified against the
+running system before this document was sent.
+
+| Trigger in the output | Verdict | Cited rulebook(s) |
+|---|---|---|
+| An email address, UAE phone number, Emirates ID or AE IBAN | flagged | DIFC DP Law 5/2020 + DIFC Regulation 10 |
+| `"classifier": "individualised_advice"` alongside the output | flagged | DIFC Regulation 10 + joint enabling-tech guidelines |
+| `"classifier": "discriminatory_lending"` | flagged | DIFC Regulation 10 |
+| `"cross_border": true` with no `"lawful_basis"` | flagged | DIFC DP Law 5/2020 |
+| `"cross_border": true` **with** `"lawful_basis"` | compliant | — (the basis clears it) |
+| action `wire_transfer` or `execute_trade` | **blocked** | your own policy (the only thing that can block) |
+| Anything else | compliant | — |
+
+Append this to `attest_tests.py` and run it:
+
+```python
+print("\n=== Test 8 — every assigned rule fires on its trigger ===============")
+catalogue = [
+    ("PII",                    "model_completion", {"output": "email sara.m@example.com"}, "flagged"),
+    ("profiling/advice",       "model_completion", {"output": "you should buy X", "classifier": "individualised_advice"}, "flagged"),
+    ("discriminatory lending", "model_completion", {"output": "decline", "classifier": "discriminatory_lending"}, "flagged"),
+    ("cross-border, no basis", "model_completion", {"output": "sending data", "cross_border": True}, "flagged"),
+    ("cross-border w/ basis",  "model_completion", {"output": "sending data", "cross_border": True, "lawful_basis": "contract"}, "compliant"),
+    ("high-risk action",       "execute_trade",    {"output": "executing"}, "blocked"),
+    ("clean control",          "model_completion", {"output": "gold rose today"}, "compliant"),
+]
+for name, action, payload, expect in catalogue:
+    r = attest.gate(payload, action=action)
+    mark = "PASS" if r.status == expect else "FAIL"
+    cites = sorted({f.get("pack_code") or "your-policy" for f in r.findings})
+    print(f"  {mark} {name:24} -> {r.status:9} (expected {expect})  cites: {cites}")
+```
+
+Every line should print `PASS`. The `cites` list is the point: each flag names
+the rulebook it came from, and that citation is recorded in the audit trail with
+the output — so "was this checked against our assigned regulations?" is
+answerable later, per record, with evidence.
+
+Two notes: the `classifier` and `cross_border`/`lawful_basis` fields are how
+your systems tell Attest what an output *is* — include them in the payload where
+your workflows know them. And the clean control matters: a checker that flags
+everything is as useless as one that flags nothing.

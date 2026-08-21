@@ -47,14 +47,22 @@ def evaluate_policy_input(policy_input: PolicyInput, rules_doc: dict[str, Any]) 
         rule_id = rule_hit["rule_id"]
         regulatory_refs = rule_hit["regulatory_refs"]
         decision = rule_hit["decision"]
+        allowed = _decision_allowed(tier, decision, fail_mode=policy_input.fail_mode)
     else:
         tier = floor
         rule_id = None
         regulatory_refs = ()
-        decision = _default_decision(tier)
+        # No rule of the CUSTOMER'S matched — only Attest's built-in structural
+        # layers raised the tier. Layers are ADVISORY: they raise risk and flag,
+        # but they must never deny and never gate on approval, because "only
+        # your own policy can block" is the promise the whole product makes.
+        # (Caught live: a cross-border output was blocked by the built-in layer
+        # for an org whose own policy said nothing about cross-border.) A
+        # customer who wants these structural risks to block writes the rule
+        # themselves — the starter policy shows how.
+        decision = "flag" if _default_decision(tier) == "deny" else _default_decision(tier)
         reasons = _layer_reasons(layers) if layers else ("No policy rule matched",)
-
-    allowed = _decision_allowed(tier, decision, fail_mode=policy_input.fail_mode)
+        allowed = True
     mitigations = MITIGATIONS_BY_TIER.get(tier, ())
 
     return PolicyOutput(
@@ -125,6 +133,9 @@ def _default_decision(tier: RiskTier) -> PolicyDecision:
 
 
 def _decision_allowed(tier: RiskTier, decision: PolicyDecision, *, fail_mode: str) -> bool:
+    """Only reached when a rule the CUSTOMER wrote matched (layer-only outcomes
+    are always allowed — advisory). red + flag deliberately gates: it is the
+    human-approval workflow, "pause for a person, then resume"."""
     if decision == "deny":
         return False
     if decision == "allow":

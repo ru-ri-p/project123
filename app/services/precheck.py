@@ -27,13 +27,17 @@ class NoActivePolicyError(LookupError):
 
 
 def tier_allows_action(tier: RiskTier, *, fail_mode: str, allowed: bool) -> bool:
-    if allowed is False:
-        return False
-    if tier in ("green", "yellow"):
-        return True
-    if tier == "orange":
-        return True
-    return fail_mode == "allow_with_flag"
+    """Trust the evaluator's verdict; do not re-derive blocking from the tier.
+
+    The evaluator already encodes every legitimate block: a customer rule that
+    denies, and the red+flag human-approval gate (which consults fail_mode).
+    This function used to ALSO block on tier==red even when the evaluator said
+    allowed — so an advisory layer or pack that merely raised the tier could
+    block an output the customer's own policy permitted. Caught live: a
+    cross-border output was blocked for an org whose policy said nothing about
+    cross-border. Only the customer's own policy may block.
+    """
+    return bool(allowed)
 
 
 def run_precheck(
