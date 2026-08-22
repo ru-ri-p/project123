@@ -190,6 +190,9 @@ def _decision_out(row: PolicyDecisionSummary) -> PolicyDecisionOut:
         status=row.status,
         output_seq=row.output_seq,
         output_hash=row.output_hash,
+        remediation=row.remediation,
+        remediation_of=row.remediation_of,
+        remediated_by_seq=row.remediated_by_seq,
     )
 
 

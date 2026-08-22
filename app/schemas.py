@@ -422,6 +422,11 @@ class PolicyDecisionOut(BaseModel):
     status: str | None = None
     output_seq: int | None = None
     output_hash: str | None = None
+    # Shape of the fix offered at gate time (plan_hash, edit kinds, counts) —
+    # the content itself was returned to the caller only, never stored.
+    remediation: dict[str, Any] | None = None
+    remediation_of: int | None = None
+    remediated_by_seq: int | None = None
 
 
 class ComplianceSummaryOut(BaseModel):
