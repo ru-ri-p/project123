@@ -663,3 +663,41 @@ before committing. Remote was never at risk.
 STATE AT END: prod healthy (paid DB, backed up), fb260c5+ deployed, pilot guide
 fc812a2 on both branches, wheel with founder, founder about to send the go-
 package. Waiting on TradeEasy's results table.
+
+--------------------------------------------------------------------------------
+DESIGN SESSION 2026-08-23: the remediation loop — SETTLED DECISIONS (no code yet)
+--------------------------------------------------------------------------------
+Founder wants design-first, no build yet. Product north star, their words kept:
+"We flagged it, here is the fix, here is proof the fix shipped, and nobody can
+doctor that history" — DIFC Reg 10 record-keeping duty; Attest suggests and
+records, the customer decides.
+
+AGREED:
+  1. Suggestion storage: hash in the decision event; full text returned to the
+     customer, stored only under their content-encryption rules.
+  2. SDK never auto-applies. Explicit apply_suggestion(); maybe opt-in
+     auto-redact for PII later.
+  3. Re-gate linkage: explicit remediates= reference on the gate call.
+     Chain reads flagged -> fix suggested -> revised output compliant.
+  4. Enforcement = customer ADOPTING counsel_reviewed pack rules into their OWN
+     policy (one click, provenance recorded). "Only your policy blocks" never
+     changes, for anyone, ever.
+  5. Planner V1 = deterministic only (founder's explicit preference). V2 (LLM)
+     is NOT a fork — same planner interface, additive later. Not being built.
+  6. Planner trigger: NOT red-only. V1 is deterministic and costs microseconds,
+     and the most remediable finding (PII redaction) is ORANGE tier — red-only
+     would skip the flagship fix. Tier-gating is the cost lever for the LLM
+     planner (V2) only, where the founder's red-only instinct is exactly right.
+  7. Semantic LLM layer: not now. Cost estimates delivered (see chat 2026-08-23):
+     ~$0.002-0.011 per judged call depending on model tier, with four cost dials
+     (tier-gate which outputs get judged / sample % / prompt-cache the rulebook /
+     batch API for non-realtime). Integrity rules if ever built: judge is
+     advisory-only feeding the same findings stream, never owns the verdict,
+     every finding carries model id + prompt hash, judge-drafted rewrites are
+     never auto-applied, judged inline pre-encryption only (content leaves to
+     the model API — needs customer disclosure/consent; dark orgs = inline or
+     never), judge unavailable -> gate proceeds and records "not judged".
+
+Purpose framing: the pilot + trigger catalogue + remediation loop = the workable
+model demo BEFORE approaching law firms; lawyers then verify content, they do
+not have to imagine the product.
