@@ -701,3 +701,59 @@ AGREED:
 Purpose framing: the pilot + trigger catalogue + remediation loop = the workable
 model demo BEFORE approaching law firms; lawyers then verify content, they do
 not have to imagine the product.
+
+--------------------------------------------------------------------------------
+SESSION 2026-08-24: THE REMEDIATION LOOP — BUILT (five slices, each committed)
+--------------------------------------------------------------------------------
+The MVP centrepiece: "we flagged it, here is the fix, here is proof the fix
+shipped, and nobody can doctor that history." All five slices green.
+
+  409bbc0 slice 1 — planner (app/services/remediation.py): deterministic only,
+          reuses mitigation handlers + PII detector (nothing forked), edits cite
+          the findings they cure (PackFinding.matched_on), re-checks its own
+          redaction and demotes failures to unresolved, plans carry labels never
+          matched text, plan_hash via the one canonicaliser.
+  6c0da23 slice 2 — gate: suggested_fix on flagged AND blocked (orange included
+          per founder decision), chain stores plan SHAPE only (hash/kinds/counts)
+          — content returned to caller, never persisted; remediates= validated
+          before recording (same org, same trace, actually flagged), sealed into
+          the decision event; ONLY a compliant re-gate closes the loop; verdict
+          moved to app/services/verdict.py (one definition, no import cycle).
+          Migration a2f83d19c7e4: summaries + remediation/remediation_of/
+          remediated_by_seq.
+  cb72782 slice 3 — SDK: suggested_fix, has_fix, apply_suggestion() (returns a
+          copy, refuses when no mechanical fix), gate(remediates=). A remediation
+          is NEVER buffered offline — an unvalidated "fixes decision N" claim
+          queued during an outage would mint links nobody checked. Additive;
+          old SDK/server pairs interoperate.
+  99c25a2 slice 4 — console: AWAITING REMEDIATION (shape + plan hash) while
+          open, REMEDIATED naming the closing seq, FIX FOR SEQ N on the cure;
+          content never shown because the console never has it. remediation_e2e
+          (12th browser suite) walks the loop and asserts the PII never reaches
+          the console.
+  slice 5 — scripts/demo_remediation.py: one command against any deployment →
+          full story + evidence zip; verified OFFLINE here: ALL EVENTS VERIFIED,
+          4 events. That zip is the law-firm artifact; the pitch ends "your
+          review turns these UNVERIFIED draft rules into signed-off ones — the
+          machinery does not change."
+
+Tests: 217 passed (10 planner attacks, 6 loop, 4 SDK). Twelve E2E suites pass.
+ruff clean; mypy at the pre-existing 7.
+
+ENVIRONMENT LESSONS THIS SESSION
+  - The pytest suite began tripping OUR OWN production rate limiter late in the
+    alphabet, surfacing as KeyError('api_key') in org fixtures — conftest now
+    sets RATE_LIMIT_MAX_REQUESTS=1000000 for the test process only. E2E suites
+    run back-to-back still trip it (admin/policy failed 10th and 11th, passed
+    in isolation) — wait for /v1/admin/ping = 200 between suites.
+  - pgrep -f matches its own bash -c wrapper: "uvicorn running" was a lie.
+
+LOCAL-ONLY BLEMISH: the demo against the dev DB cites ~230 testpack_* packs
+(test debris matches has_pii, difc×*). Production has only the 7 real packs.
+POLISH LATER: verify.py's summary prints "Workflow: blocked_pending_approval"
+for orange-tier traces (the approval side-feature) — factual but confusing in a
+law-firm bundle; tidy the summary line someday.
+
+NOT DEPLOYED YET: needs main push + mirror + Manual Deploy (migration
+a2f83d19c7e4 runs then). TradeEasy's guide unchanged on purpose — Test 9
+(remediation) goes into a v2 after the pilot's current run.
