@@ -53,6 +53,28 @@ Useful fields: `result.findings` (each with the instrument cited),
 `result.jurisdictions`, `result.tier`, `result.trace_id`, `result.output_hash`,
 and `result.summary()` for a one-line log entry.
 
+**When something is flagged: the fix comes with the flag.** A non-compliant
+verdict carries `result.suggested_fix` — a deterministic revision (personal
+data redacted, promissory phrasing softened), each edit citing the finding it
+cures, plus an honest `unresolved` list for what needs a human. Attest never
+applies it; your code adopts it visibly, then re-gates it naming the flag it
+fixes:
+
+```python
+result = attest.gate({"output": answer}, trace=t)
+if result.flagged and result.has_fix:
+    fixed = result.apply_suggestion()               # your code's explicit act
+    proof = attest.gate(fixed, trace=result.trace_id,
+                        remediates=result.decision_seq)
+    # proof.status == "compliant" closes the loop: the sealed history now
+    # reads flagged -> fix suggested -> revised output compliant, and nobody
+    # (including Attest) can doctor that story afterwards.
+```
+
+A "fix" that still flags leaves the original flag open — the attempt is never
+the cure. Remediation calls are never queued during an outage: the link must be
+validated against the real chain, so retry when Attest is back.
+
 **Grouping steps.** By default each call is its own record. To tell one story
 across several steps, pass the trace from the first call:
 

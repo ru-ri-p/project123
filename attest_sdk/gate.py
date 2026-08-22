@@ -43,6 +43,15 @@ class GateResult:
     buffered: bool = False
     offline: bool = False
     error: str | None = None
+    # Deterministic remediation plan when the verdict is flagged or blocked:
+    # {revised_output, edits, requirements, unresolved, plan_hash}. Attest never
+    # applies it — call apply_suggestion() and re-gate the result yourself, with
+    # remediates=<this decision_seq>, so the fix lands in the sealed history.
+    # None on compliant verdicts, and always None offline (the planner is
+    # server-side in v1).
+    suggested_fix: dict[str, Any] | None = None
+    # Set when this result judged a revision submitted with remediates=.
+    remediation_of: int | None = None
 
     # --- convenience -------------------------------------------------------
 
@@ -63,6 +72,29 @@ class GateResult:
     @property
     def evaluated(self) -> bool:
         return self.status in (COMPLIANT, FLAGGED, BLOCKED)
+
+    @property
+    def has_fix(self) -> bool:
+        """A revised output is ready to apply and re-gate."""
+        return bool(self.suggested_fix and self.suggested_fix.get("revised_output"))
+
+    def apply_suggestion(self) -> dict[str, Any]:
+        """The revised output, for YOUR code to adopt — explicitly, visibly.
+
+        Attest never applies a fix for you; this returns a payload you then
+        send back through gate(..., trace=<same trace>, remediates=
+        <this result's decision_seq>). Raises if there is no revision — check
+        has_fix first, and read suggested_fix["unresolved"] for what still
+        needs a human.
+        """
+        if not self.has_fix:
+            msg = (
+                "no revised output to apply — this verdict has no mechanical "
+                "fix; see suggested_fix['unresolved'] if present"
+            )
+            raise ValueError(msg)
+        assert self.suggested_fix is not None  # narrowed by has_fix
+        return dict(self.suggested_fix["revised_output"])
 
     def summary(self) -> str:
         """One line for your logs."""
@@ -114,6 +146,8 @@ class GateResult:
             decision_seq=body.get("decision_seq"),
             approval_id=body.get("approval_id"),
             recorded=True,
+            suggested_fix=body.get("suggested_fix"),
+            remediation_of=body.get("remediation_of"),
         )
 
     @classmethod

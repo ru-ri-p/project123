@@ -80,6 +80,7 @@ class AttestClient:
         *,
         trace: str | None = None,
         policy_version: str | None = None,
+        remediates: int | None = None,
         on_error: str = "flag",
     ) -> GateResult:
         """Check and log one AI output. This is the whole integration.
@@ -114,6 +115,13 @@ class AttestClient:
             body["trace_id"] = trace
         if policy_version:
             body["policy_version"] = policy_version
+        if remediates is not None:
+            # Naming the flagged decision this output cures. Requires trace:
+            # the fix must land in the same sealed story as the flag. A
+            # remediation is never buffered offline — the link must be
+            # validated against the real chain, so if Attest is unreachable
+            # the caller retries rather than queueing a claim we cannot check.
+            body["remediates"] = remediates
         try:
             response = requests.post(
                 f"{self.base_url}/v1/gate",
@@ -134,6 +142,12 @@ class AttestClient:
                 return GateResult.misconfigured(config_error, trace_id=trace or "")
             if on_error == "raise":
                 raise
+            if remediates is not None:
+                # A remediation claim is only true once the server has checked
+                # it against the real chain (right org, right trace, actually
+                # flagged). Queueing it unvalidated would let a dead network
+                # mint "fixed" links nobody verified — retry when we're back.
+                return GateResult.unreachable(exc, trace_id=trace or "")
             if self.offline_enabled:
                 # Attest is down; keep serving AND keep the trail.
                 return self._gate_offline(action, output, trace)
