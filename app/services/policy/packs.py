@@ -48,6 +48,11 @@ class PackFinding:
     source_url: str | None
     verification_status: str
     enforcement: str
+    # Which structural signal the rule matched on (has_pii, classifier, action,
+    # cross_border, prohibited_phrases, ...). Lets the remediation planner tie
+    # each suggested edit to the findings it cures, without re-deriving rule
+    # internals downstream.
+    matched_on: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -63,6 +68,7 @@ class PackFinding:
             "source_url": self.source_url,
             "verification_status": self.verification_status,
             "enforcement": self.enforcement,
+            "matched_on": self.matched_on,
             # Spelled out on every finding so it cannot be quoted out of context.
             "advisory_only": self.enforcement != "blocking",
         }
@@ -77,6 +83,20 @@ def active_packs_for_org(db: Session, org_id: str) -> list[tuple[RegulationPack,
         .all()
     )
     return [(pack, enforcement) for pack, enforcement in rows]
+
+
+def _matched_on(match: dict[str, Any]) -> str | None:
+    """Name the structural signal a rule's match keys point at."""
+    if match.get("has_pii") is True:
+        return "has_pii"
+    if "action" in match:
+        return "action"
+    feature = match.get("feature")
+    if isinstance(feature, str):
+        return feature  # classifier, cross_border, prohibited_phrases, ...
+    if "payload_key" in match:
+        return "payload_key"
+    return None
 
 
 def evaluate_packs(
@@ -111,6 +131,8 @@ def evaluate_packs(
                 continue
             if not hit:
                 continue
+            raw_match = rule.get("match")
+            match: dict[str, Any] = raw_match if isinstance(raw_match, dict) else {}
             findings.append(
                 PackFinding(
                     pack_code=pack.code,
@@ -125,6 +147,7 @@ def evaluate_packs(
                     source_url=pack.source_url,
                     verification_status=pack.verification_status,
                     enforcement=enforcement,
+                    matched_on=_matched_on(match),
                 )
             )
 
