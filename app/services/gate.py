@@ -42,33 +42,62 @@ from app.repositories import events as event_repo
 from app.services.events import record_event
 from app.services.precheck import NoActivePolicyError, run_precheck
 
-# Verdicts the caller sees. Derived in ONE place so the SDK, the API and the
-# dashboards cannot drift into disagreeing about what "compliant" means.
-STATUS_COMPLIANT = "compliant"
-STATUS_FLAGGED = "flagged"
-STATUS_BLOCKED = "blocked"
-STATUS_UNEVALUATED = "unevaluated"
-
-FLAGGING_TIERS = frozenset({"orange", "red"})
-
-
-def derive_status(*, allowed: bool, tier: str, findings: list[dict[str, Any]]) -> str:
-    """The single definition of the verdict.
-
-    blocked  — the institution's OWN policy denied it (only their policy can).
-    flagged  — permitted, but raised risk or drew a cited jurisdiction finding.
-    compliant— permitted, low risk, nothing cited.
-    """
-    if not allowed:
-        return STATUS_BLOCKED
-    if tier in FLAGGING_TIERS or findings:
-        return STATUS_FLAGGED
-    return STATUS_COMPLIANT
+# The verdict has ONE definition, in app/services/verdict.py — shared with the
+# precheck pipeline so the sealed decision event and the API answer can never
+# disagree. Re-exported here because this module is where callers look for it.
+from app.services.verdict import (  # noqa: F401  (re-exports)
+    FLAGGING_TIERS,
+    STATUS_BLOCKED,
+    STATUS_COMPLIANT,
+    STATUS_FLAGGED,
+    STATUS_UNEVALUATED,
+    derive_status,
+)
 
 
 def _next_seq(db: Session, org_id: str, trace_id: uuid.UUID) -> int:
     last = event_repo.last_event_for_trace(db, org_id, trace_id)
     return 1 if last is None else last.seq + 1
+
+
+class RemediationRefError(ValueError):
+    """The remediates= reference does not name a flagged decision the caller owns."""
+
+
+def _validate_remediates(
+    db: Session, org_id: str, trace_id: uuid.UUID | None, remediates: int
+) -> PolicyDecisionSummary:
+    """A remediation must cure a real, non-compliant decision in the SAME trace.
+
+    Same trace because the chain is the story: flagged and fixed must sit in one
+    narrative an auditor reads top to bottom. Same org is enforced by the query —
+    a caller can never 'remediate' another tenant's record into their own chain.
+    """
+    if trace_id is None:
+        msg = (
+            "remediates requires trace_id: the fix must be recorded in the same "
+            "trace as the flagged decision it cures"
+        )
+        raise RemediationRefError(msg)
+    summary = (
+        db.query(PolicyDecisionSummary)
+        .filter(
+            PolicyDecisionSummary.org_id == org_id,
+            PolicyDecisionSummary.trace_id == trace_id,
+            PolicyDecisionSummary.seq == remediates,
+        )
+        .one_or_none()
+    )
+    if summary is None:
+        msg = f"remediates={remediates} does not name a decision in this trace"
+        raise RemediationRefError(msg)
+    if summary.status not in (STATUS_FLAGGED, STATUS_BLOCKED):
+        msg = (
+            f"decision seq {remediates} is '{summary.status}', not flagged or "
+            "blocked — there is nothing to remediate"
+        )
+        raise RemediationRefError(msg)
+    return summary
 
 
 def run_gate(
@@ -79,8 +108,15 @@ def run_gate(
     output: dict[str, Any],
     trace_id: uuid.UUID | None = None,
     policy_version: str | None = None,
+    remediates: int | None = None,
 ) -> dict[str, Any]:
     """Evaluate and record one AI output. Returns the verdict for the caller."""
+    remediated_summary: PolicyDecisionSummary | None = None
+    if remediates is not None:
+        # Validated BEFORE anything is recorded: a bad reference must fail the
+        # call, not leave a half-told story in the chain.
+        remediated_summary = _validate_remediates(db, org.id, trace_id, remediates)
+
     trace_id = trace_id or uuid.uuid4()
     event_repo.get_or_create_trace(db, org.id, trace_id, policy_version)
 
@@ -95,6 +131,7 @@ def run_gate(
             action=action,
             payload=output,
             policy_version=policy_version,
+            remediation_of=remediates,
         )
     except NoActivePolicyError:
         # Record anyway — see module docstring. The verdict says plainly that no
@@ -131,6 +168,8 @@ def run_gate(
             "output_hash": event.hash,
             "signature": event.signature,
             "approval_id": None,
+            "suggested_fix": None,
+            "remediation_of": remediates,
         }
 
     findings = decision.get("regulatory_findings", [])
@@ -155,6 +194,13 @@ def run_gate(
         summary.output_hash = event.hash
         db.flush()
 
+    # Close the loop: only a COMPLIANT re-gate cures the flagged decision. A
+    # "fix" that still flags leaves the original open — an unremediated flag
+    # must stay conspicuous, never be closed by the attempt alone.
+    if remediated_summary is not None and status == STATUS_COMPLIANT:
+        remediated_summary.remediated_by_seq = decision.get("policy_decision_seq")
+        db.flush()
+
     return {
         "trace_id": str(trace_id),
         "status": status,
@@ -169,4 +215,8 @@ def run_gate(
         "output_hash": event.hash,
         "signature": event.signature,
         "approval_id": decision.get("approval_id"),
+        # The full plan — content-bearing — exists only in this response and in
+        # the caller's hands; the chain carries its hash. See remediation.py.
+        "suggested_fix": decision.get("remediation_plan"),
+        "remediation_of": remediates,
     }

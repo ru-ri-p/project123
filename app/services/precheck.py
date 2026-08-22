@@ -12,12 +12,14 @@ from app.domain.policy_contract import PolicyInput
 from app.repositories import approvals as approval_repo
 from app.repositories import events as event_repo
 from app.repositories import policies as policy_repo
+from app.services import remediation
 from app.services.events import EventSequenceError, record_event
 from app.services.policy.evaluator import evaluate_policy_input
 from app.services.policy.features import extract_features
 from app.services.policy.packs import combined_tier, evaluate_packs, jurisdictions_touched
 from app.services.policy.rules import PolicyEngineError
 from app.services.policy.tiers import RiskTier
+from app.services.verdict import STATUS_BLOCKED, STATUS_FLAGGED, derive_status
 
 TIERS_REQUIRING_APPROVAL: frozenset[str] = frozenset({"orange", "red"})
 
@@ -47,6 +49,7 @@ def run_precheck(
     trace_id: uuid.UUID,
     seq: int,
     action: str,
+    remediation_of: int | None = None,
     payload: dict[str, Any],
     policy_version: str | None,
 ) -> dict[str, Any]:
@@ -110,6 +113,24 @@ def run_precheck(
     # business. Blocking on packs is a deliberate later decision, per pack.
     allowed = tier_allows_action(output.tier, fail_mode=org.fail_mode, allowed=output.allowed)
 
+    # Remediation: for any non-compliant verdict (orange included — that is
+    # where the most remediable finding, personal data, lives), build a
+    # deterministic plan. The SHAPE of the plan is sealed into the signed
+    # decision event; the full plan — which derives from customer content — is
+    # returned to the caller only and never persisted outside their
+    # content-encryption rules.
+    finding_dicts = [f.to_dict() for f in findings]
+    status = derive_status(allowed=allowed, tier=effective_tier, findings=finding_dicts)
+    remediation_plan: dict[str, Any] | None = None
+    if status in (STATUS_FLAGGED, STATUS_BLOCKED):
+        remediation_plan = remediation.plan(
+            payload=payload,
+            features=features,
+            findings=finding_dicts,
+            policy_reasons=list(output.reasons),
+            blocked=not allowed,
+        )
+
     decision_payload: dict[str, Any] = {
         "action": action,
         "tier": effective_tier,
@@ -129,8 +150,16 @@ def run_precheck(
         # rulebook was applied, citing what, and how well verified. This is what
         # makes the rulebook itself auditable after the fact.
         "jurisdictions": jurisdictions_touched(findings),
-        "regulatory_findings": [f.to_dict() for f in findings],
+        "regulatory_findings": finding_dicts,
     }
+    if remediation_plan is not None:
+        decision_payload["remediation"] = remediation.chain_summary(remediation_plan)
+    if remediation_of is not None:
+        # This decision judges a REVISED output, offered as the cure for an
+        # earlier flagged decision in the same trace. Sealed in the event so the
+        # flagged → fixed link is part of the tamper-evident story, not an
+        # annotation someone could quietly drop.
+        decision_payload["remediation_of"] = remediation_of
 
     event_result = record_event(
         db,
@@ -157,8 +186,14 @@ def run_precheck(
             policy_tier=output.tier,
             allowed=allowed,
             policy_version=policy.version,
-            findings=[f.to_dict() for f in findings],
+            findings=finding_dicts,
             jurisdictions=jurisdictions_touched(findings),
+            remediation=(
+                remediation.chain_summary(remediation_plan)
+                if remediation_plan is not None
+                else None
+            ),
+            remediation_of=remediation_of,
         )
     )
     db.flush()
@@ -194,7 +229,9 @@ def run_precheck(
         "layer_results": [layer.to_dict() for layer in output.layer_results],
         "mitigations": list(output.mitigations),
         "jurisdictions": jurisdictions_touched(findings),
-        "regulatory_findings": [f.to_dict() for f in findings],
+        "regulatory_findings": finding_dicts,
+        "remediation_plan": remediation_plan,
+        "remediation_of": remediation_of,
     }
 
 

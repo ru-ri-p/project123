@@ -18,7 +18,7 @@ from app.db.session import get_db
 from app.schemas import GateIn, GateOut
 from app.services.access import TraceAccessDeniedError
 from app.services.events import EventSequenceError, InvalidEventTypeError
-from app.services.gate import run_gate
+from app.services.gate import RemediationRefError, run_gate
 from app.services.onboarding import require_onboarded
 
 router = APIRouter(prefix="/v1", tags=["gate"])
@@ -47,8 +47,12 @@ def gate(
             output=body.output,
             trace_id=trace_id,
             policy_version=body.policy_version,
+            remediates=body.remediates,
         )
         db.commit()
+    except RemediationRefError as exc:
+        db.rollback()
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     except TraceAccessDeniedError as exc:
         db.rollback()
         raise HTTPException(status_code=403, detail=str(exc)) from exc

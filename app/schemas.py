@@ -374,6 +374,16 @@ class GateIn(BaseModel):
         description="Omit for a standalone record; pass one to group several steps.",
     )
     policy_version: str | None = None
+    remediates: int | None = Field(
+        default=None,
+        ge=1,
+        description=(
+            "Seq of a flagged/blocked decision in the SAME trace that this "
+            "output is the fix for. Requires trace_id. If this output comes "
+            "back compliant, the flagged decision is marked remediated — the "
+            "chain then reads flagged, fix, proven fixed."
+        ),
+    )
 
 
 class GateOut(BaseModel):
@@ -390,6 +400,11 @@ class GateOut(BaseModel):
     output_hash: str
     signature: str
     approval_id: str | None = None
+    # Deterministic remediation plan for a non-compliant verdict: revised
+    # output, per-edit citations, honest unresolved list. Returned here only —
+    # the signed chain carries its hash, never its content.
+    suggested_fix: dict[str, Any] | None = None
+    remediation_of: int | None = None
 
 
 class PolicyDecisionOut(BaseModel):

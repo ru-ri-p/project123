@@ -564,6 +564,16 @@ class PolicyDecisionSummary(Base):
     #   verification_status, advisory_only}] — rule identifiers only.
     findings: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False)
     jurisdictions: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    # Remediation, shape only (plan_hash, edit kinds, counts) — the full plan
+    # derives from customer content and is never stored here. Set when the gate
+    # offered a fix for this (non-compliant) decision.
+    remediation: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    # Set on the CURING decision: seq of the flagged decision it remediates.
+    remediation_of: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Set on the CURED decision once a linked re-gate came back compliant: seq
+    # of the decision that closed it. This is what flips the console chip to
+    # REMEDIATED, so silence (an open flag) stays conspicuous.
+    remediated_by_seq: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # Verdict as the caller was told it (compliant | flagged | blocked |
     # unevaluated). Stored rather than recomputed so the dashboards cannot drift
     # from what the customer's code actually received. NULL for decisions made
