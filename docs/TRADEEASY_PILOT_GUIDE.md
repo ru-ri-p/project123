@@ -160,7 +160,7 @@ conversation with us, not code. Part D.)
 
 1. Console → **Compliance** → your policy editor. Find the rule
    `high_risk_financial_action` and change its `"decision"` from `"deny"` to
-   `"flag"`. Republish.
+   `"flag"` **and** its `"tier"` from `"red"` to `"orange"`. Republish.
 2. Run just this again (python interpreter or re-run the script and read Test 3a):
 
 ```python
@@ -172,6 +172,11 @@ print(r.status, r.blocked)
 rule changed. That is the design: what is acceptable for TradeEasy is written by
 TradeEasy; Attest applies it without exception and proves it did. Feel free to
 change the rule back afterwards.
+
+(Why the tier matters: `red` + `flag` is a third behaviour — the human-approval
+gate. The action is held as `blocked` with an `approval_id` until a person
+approves it, then it may resume. Useful when you want a pause, not a wall — but
+it is not the plain flag this test demonstrates.)
 
 ---
 

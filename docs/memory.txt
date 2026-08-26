@@ -768,3 +768,32 @@ ALL EVENTS VERIFIED, 4 events. Zip delivered to founder via chat attachment.
 Lesson: base64-through-a-web-shell is fragile; next time prefer rotating the
 demo org's key and curling the export from the laptop, or build demo-org cleanup
 + a printed download hint into the script.
+
+--------------------------------------------------------------------------------
+SESSION 2026-08-27: the dress rehearsal — verify everything before TradeEasy
+--------------------------------------------------------------------------------
+Founder asked to verify the ENTIRE system with dummy data before sending the
+customer package. Built scripts/dress_rehearsal.py: one command, 27 checks, all
+synthetic, non-destructive, PASS/FAIL ledger, exit 0 = safe to send. Covers:
+onboarding gate (409 before profile), pack coverage, the full trigger catalogue
+(flags cite DIFC and never block; only own policy blocks), rule ownership incl.
+red+flag = approval gate, multi-step trace + replay, the remediation loop end to
+end (REMEDIATED in the decisions index), the CONSENT CEREMONY programmatically
+via the SDK ConsentClient (go dark → DENY → admin read 403 → approve → read
+exactly one record → other record still 403), outage buffer + drain, and
+evidence export verified offline via subprocess verify.py.
+
+LOCAL RESULT: 27/27. Two of my own slips found while building (filing response
+field is request_id not id; grant read returns `content` not `payload`).
+
+REAL CATCH — THE GUIDE WAS WRONG: TRADEEASY_PILOT_GUIDE Part C told them to
+change decision deny→flag keeping tier red and expect `flagged`. C2 proves
+red+flag = BLOCKED with approval_id (the human-approval gate — correct, designed
+semantics after the only-own-policy-blocks fix). They would have hit a false
+failure on Test 3b. Guide now says change tier to orange too, and explains
+red+flag as the third behaviour. This is exactly what the rehearsal is for.
+
+RUNBOOK: deploy latest, then in the Render shell:
+  ATTEST_URL=https://attest-api-ipvl.onrender.com python scripts/dress_rehearsal.py
+27/27 on prod = send the package. Throwaway orgs org_dr_* accumulate; cleanup
+is on the polish list.
