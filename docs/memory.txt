@@ -757,3 +757,14 @@ law-firm bundle; tidy the summary line someday.
 NOT DEPLOYED YET: needs main push + mirror + Manual Deploy (migration
 a2f83d19c7e4 runs then). TradeEasy's guide unchanged on purpose — Test 9
 (remediation) goes into a v2 after the pilot's current run.
+
+MILESTONE 2026-08-26: first PRODUCTION remediation evidence bundle, verified.
+Founder ran scripts/demo_remediation.py against the live service: clean run,
+DIFC-only citations (org_demo_rem_461f8916, trace 0b5ce120-2607-4173-a5ef-
+ebaf2e242aa5). Bundle carried out of the Render shell via base64 (first attempt
+lost the top of the output to shell scrollback — the tell was the paste not
+starting with UEsDB; second attempt complete). Verified OFFLINE in this session:
+ALL EVENTS VERIFIED, 4 events. Zip delivered to founder via chat attachment.
+Lesson: base64-through-a-web-shell is fragile; next time prefer rotating the
+demo org's key and curling the export from the laptop, or build demo-org cleanup
++ a printed download hint into the script.
