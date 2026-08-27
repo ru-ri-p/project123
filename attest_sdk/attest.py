@@ -240,6 +240,9 @@ class AttestClient:
                 auto_remediation={
                     "applied": False,
                     "cure": kind,
+                    # The cure we tried to apply, so the caller can retry it
+                    # explicitly: gate(output, trace=..., remediates=...).
+                    "output": cure,
                     "remediated_seq": first.decision_seq,
                     "original_tier": first.tier,
                     "original_status": first.status,
@@ -251,6 +254,9 @@ class AttestClient:
             auto_remediation={
                 "applied": True,
                 "cure": kind,
+                # The cured payload — what the caller's application should now
+                # serve. The verdict in this result is ABOUT this payload.
+                "output": cure,
                 "remediated_seq": first.decision_seq,
                 "original_tier": first.tier,
                 "original_status": first.status,

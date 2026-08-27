@@ -867,3 +867,17 @@ Tests: tests/test_sdk_auto_remediate.py (10, monkeypatched requests.post
 sequence). Full suite 234 passed. Version bumped 0.1.0 -> 0.2.0, wheel rebuilt
 (attest_sdk-0.2.0-py3-none-any.whl) for the TradeEasy package. README gained
 "Choosing per tier" + verified-rewrites sections.
+
+--- 2026-08-27 (cont.) — cured-output field + TradeEasy integration guide ---
+Gap caught while writing engineer instructions: auto_remediation told the
+caller a cure was applied but did not HAND BACK the cured payload. Fixed:
+auto_remediation now carries "output" (the cured payload — what to serve; on
+applied=false it is the cure to retry). Tests updated, 234 pass. Wheel 0.2.0
+rebuilt (supersedes the earlier 0.2.0 build — send only the new one).
+New doc: docs/TRADEEASY_INTEGRATION.md — engineer-facing production wiring
+(install/config, where gate() goes, verdict table, per-tier auto-remediation,
+human path incl. approvals + rewrite confirmation, traces, outages, replay/
+evidence, drop-in compliance.py reference, smoke test). Placeholder key only.
+Anthropic key guidance to founder: key lives on OUR Render service (attest-api
+env ANTHROPIC_API_KEY), never TradeEasy's side; spend cap in Anthropic console;
+consent/disclosure line before real customer data transits the model API.

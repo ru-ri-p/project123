@@ -93,9 +93,15 @@ def test_auto_tier_applies_the_fix_and_returns_the_closed_loop(monkeypatch) -> N
     assert r.compliant
     assert r.remediation_of == 3
     assert r.auto_remediation == {
-        "applied": True, "cure": "deterministic", "remediated_seq": 3,
+        "applied": True, "cure": "deterministic",
+        "output": {"output": "call [REDACTED:phone_ae]"},
+        "remediated_seq": 3,
         "original_tier": "orange", "original_status": "flagged",
     }
+    assert r.auto_remediation["output"] == second["output"], (
+        "the payload handed back IS the payload the verdict is about — the "
+        "caller serves this, no guessing"
+    )
 
 
 def test_human_tier_never_auto_applies(monkeypatch) -> None:
@@ -221,6 +227,10 @@ def test_regate_outage_returns_the_sealed_flag_with_the_attempt_visible(
     assert r.flagged and r.recorded, "the flag itself IS recorded"
     assert r.auto_remediation["applied"] is False
     assert r.auto_remediation["error"], "and the failed attempt says why"
+    assert r.auto_remediation["output"], (
+        "the cure travels with the failure so the caller can retry it "
+        "explicitly when Attest is back"
+    )
 
 
 def test_invalid_config_is_rejected_at_construction() -> None:

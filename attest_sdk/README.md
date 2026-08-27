@@ -99,8 +99,9 @@ attest = AttestClient(
 result = attest.gate({"output": answer})
 if result.auto_remediation and result.auto_remediation["applied"]:
     # The flag AND its cure are already sealed in the chain; result is the
-    # final verdict on the fixed output (usually compliant).
-    answer = ...  # adopt the cured output your gate() call returned the verdict for
+    # final verdict on the fixed output (usually compliant), and the cured
+    # payload rides with it — serve that, not the original.
+    answer = result.auto_remediation["output"]["output"]
 ```
 
 With a tier set to `"auto"`, a flagged verdict at that tier whose fix is
