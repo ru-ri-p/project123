@@ -797,3 +797,50 @@ RUNBOOK: deploy latest, then in the Render shell:
   ATTEST_URL=https://attest-api-ipvl.onrender.com python scripts/dress_rehearsal.py
 27/27 on prod = send the package. Throwaway orgs org_dr_* accumulate; cleanup
 is on the polish list.
+
+--------------------------------------------------------------------------------
+SESSION 2026-08-27 (cont.): V2 SEMANTIC REWRITE — BUILT (founder reversed the
+park decision after the walkthrough showed the human-judgement gap)
+--------------------------------------------------------------------------------
+The ask: not just flag + mechanical fix, but SUGGEST A FULLY COMPLIANT OUTPUT.
+Founder chose: build now, Claude Opus drafts.
+
+THE RULE THAT MAKES IT HONEST: the model drafts, the deterministic gate judges.
+Every draft is re-evaluated in memory (_unrecorded_status in precheck — full
+pipeline: features, own policy, packs; records NOTHING) and only a PASSING draft
+is offered, labelled evaluation:"compliant". "Checked, not hoped."
+
+BUILT:
+  - app/services/rewrite.py — draft_rewrite() calls claude-opus-5 (REWRITE_MODEL
+    env), system prompt with hard rules (no invention of facts; reclassify
+    advice->commentary and say so; JSON contract), prompt-cached system block,
+    bounded REWRITE_MAX_ATTEMPTS=2, 25s timeout, graceful None on ANY failure.
+    FEATURE FLAG = ANTHROPIC_API_KEY presence: no key, no feature, responses
+    byte-identical to pre-V2 (tested).
+  - Trigger: FLAGGED verdicts whose deterministic plan left `unresolved` items
+    ONLY. Never for blocked (a rewrite cannot cure a denied action) and never
+    for purely mechanical flags (no model needed) — both asserted by tests via
+    a call-counting stub.
+  - remediation.attach_rewrite() re-seals plan_hash OVER the rewrite; chain
+    summary gains has_rewrite / rewrite_drafted_by / rewrite_reclassified —
+    model provenance is never elided, and prompt_sha256 pins the exact prompt.
+  - RECLASSIFICATION: requires_human_confirmation=true when the draft changed
+    what the output IS (the gate verifies text, not nature). Console shows
+    "VERIFIED REWRITE OFFERED · <model>" + "reclassified — confirm before
+    applying". SDK: result.rewrite + apply_rewrite(); closing the loop still
+    requires the ordinary compliant re-gate with remediates= — being
+    model-drafted earns the draft nothing.
+  - 7 attack tests (tests/test_rewrite.py) incl. THE load-bearing one: a draft
+    that still violates is never offered however confident the model was, with
+    bounded retries, and unresolved stands.
+
+224 tests pass; remediation E2E green; ruff clean; mypy at pre-existing 7.
+anthropic>=1.1.0 added to requirements.
+
+FOR THE FOUNDER TO GO LIVE: create an Anthropic API key (console.anthropic.com)
+and set ANTHROPIC_API_KEY on the attest-api Render service, then deploy. Until
+then the layer is dormant everywhere. Costs (unresolved-only trigger): pilot
+volume = single-digit $/mo; 5k outputs/day at ~5% semantic-path = ~$85/mo Opus.
+PRIVACY LINE FOR CONTRACTS: customer output transits the Anthropic API inline,
+pre-encryption; dark orgs are inline-or-never. Needs a consent line before any
+real (non-synthetic) customer data flows.

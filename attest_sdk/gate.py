@@ -74,6 +74,27 @@ class GateResult:
         return self.status in (COMPLIANT, FLAGGED, BLOCKED)
 
     @property
+    def rewrite(self) -> dict[str, Any] | None:
+        """A model-drafted, gate-verified compliant rewrite, when one exists.
+
+        Already checked by Attest's deterministic engine before being offered
+        ("evaluation": "compliant"). If requires_human_confirmation is true the
+        draft changed what the output IS (e.g. advice -> commentary) — have a
+        person confirm that before applying. Apply with apply_rewrite() and
+        re-gate with remediates=, like any fix; being model-drafted earns it
+        nothing.
+        """
+        return (self.suggested_fix or {}).get("rewrite")
+
+    def apply_rewrite(self) -> dict[str, Any]:
+        """The verified rewrite's payload, for YOUR code to adopt explicitly."""
+        rw = self.rewrite
+        if not rw or not rw.get("output"):
+            msg = "no verified rewrite on this verdict — check .rewrite first"
+            raise ValueError(msg)
+        return dict(rw["output"])
+
+    @property
     def has_fix(self) -> bool:
         """A revised output is ready to apply and re-gate."""
         return bool(self.suggested_fix and self.suggested_fix.get("revised_output"))

@@ -909,6 +909,12 @@ function remediationStrip(d) {
     const kinds = (d.remediation.edit_kinds || []).concat(d.remediation.requirement_kinds || []);
     const un = d.remediation.unresolved_count || 0;
     parts.push(`<span class="chip amber" style="font-size:9.5px;">AWAITING REMEDIATION</span>`);
+    if (d.remediation.has_rewrite) {
+      parts.push(`<span class="chip blue" style="font-size:9.5px;">VERIFIED REWRITE OFFERED · ${esc(d.remediation.rewrite_drafted_by || "model")}</span>`);
+      if (d.remediation.rewrite_reclassified) {
+        parts.push(`<span class="kv2" style="font-size:11px;">reclassified as non-advisory — confirm before applying</span>`);
+      }
+    }
     parts.push(`<span class="kv2" style="font-size:11.5px;">fix offered at gate time${
       kinds.length ? ": " + kinds.map(esc).join(", ") : ""}${
       un ? ` · ${un} item(s) need a human` : ""} · plan ${esc((d.remediation.plan_hash||"").slice(0,12))}…</span>`);

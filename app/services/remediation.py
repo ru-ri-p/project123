@@ -190,6 +190,26 @@ def plan(
     return {**body, "plan_hash": sha256_hex(body)}
 
 
+def attach_rewrite(
+    plan: dict[str, Any], rewrite: dict[str, Any]
+) -> dict[str, Any]:
+    """Add a gate-verified semantic rewrite to a plan and re-seal the hash.
+
+    Called ONLY after the caller has re-evaluated the draft with the
+    deterministic engine and seen it pass — this module never judges. The hash
+    is recomputed so the signed decision event pins the rewrite too: nobody can
+    later swap in a different "suggested" text and claim it was ours.
+    """
+    body = {
+        "revised_output": plan["revised_output"],
+        "edits": plan["edits"],
+        "requirements": plan["requirements"],
+        "unresolved": plan["unresolved"],
+        "rewrite": rewrite,
+    }
+    return {**body, "plan_hash": sha256_hex(body)}
+
+
 def chain_summary(remediation_plan: dict[str, Any]) -> dict[str, Any]:
     """What the signed decision event stores about a plan: shape, never content.
 
@@ -205,4 +225,14 @@ def chain_summary(remediation_plan: dict[str, Any]) -> dict[str, Any]:
         ),
         "unresolved_count": len(remediation_plan["unresolved"]),
         "has_revision": remediation_plan["revised_output"] is not None,
+        # A semantic rewrite, when present, is already gate-verified — but the
+        # index still records WHO drafted it. Model provenance is never elided.
+        "has_rewrite": "rewrite" in remediation_plan,
+        "rewrite_drafted_by": (
+            remediation_plan.get("rewrite", {}).get("drafted_by")
+            if "rewrite" in remediation_plan else None
+        ),
+        "rewrite_reclassified": bool(
+            remediation_plan.get("rewrite", {}).get("reclassified")
+        ),
     }

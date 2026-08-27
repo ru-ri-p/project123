@@ -128,7 +128,8 @@ def test_the_full_story_flagged_fixed_proven(client) -> None:
     assert flagged_row.remediation is not None
     assert set(flagged_row.remediation) == {
         "plan_hash", "edit_kinds", "requirement_kinds", "unresolved_count",
-        "has_revision",
+        "has_revision", "has_rewrite", "rewrite_drafted_by",
+        "rewrite_reclassified",
     }
     assert flagged_row.remediation["plan_hash"] == fix["plan_hash"]
 

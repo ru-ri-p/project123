@@ -12,14 +12,19 @@ from app.domain.policy_contract import PolicyInput
 from app.repositories import approvals as approval_repo
 from app.repositories import events as event_repo
 from app.repositories import policies as policy_repo
-from app.services import remediation
+from app.services import remediation, rewrite
 from app.services.events import EventSequenceError, record_event
 from app.services.policy.evaluator import evaluate_policy_input
 from app.services.policy.features import extract_features
 from app.services.policy.packs import combined_tier, evaluate_packs, jurisdictions_touched
 from app.services.policy.rules import PolicyEngineError
 from app.services.policy.tiers import RiskTier
-from app.services.verdict import STATUS_BLOCKED, STATUS_FLAGGED, derive_status
+from app.services.verdict import (
+    STATUS_BLOCKED,
+    STATUS_COMPLIANT,
+    STATUS_FLAGGED,
+    derive_status,
+)
 
 TIERS_REQUIRING_APPROVAL: frozenset[str] = frozenset({"orange", "red"})
 
@@ -40,6 +45,41 @@ def tier_allows_action(tier: RiskTier, *, fail_mode: str, allowed: bool) -> bool
     cross-border. Only the customer's own policy may block.
     """
     return bool(allowed)
+
+
+def _unrecorded_status(
+    db: Session, *, org: Org, action: str, payload: dict[str, Any], policy: Any
+) -> str:
+    """Judge a payload with the full deterministic pipeline, recording NOTHING.
+
+    Used to pre-check model-drafted rewrites before they are offered: the exact
+    evaluation an output would face at the gate — features, the customer's own
+    policy, every applicable pack — with no event, no summary row, no trace.
+    A draft is only ever shown to the customer after passing this.
+    """
+    features = extract_features(action, payload)
+    try:
+        output = evaluate_policy_input(
+            PolicyInput(
+                org_id=org.id, action=action, payload=payload,
+                fail_mode=org.fail_mode, policy_version=policy.version,
+                features=features,
+            ),
+            policy.rules,
+        )
+    except PolicyEngineError:
+        return "error"
+    findings = evaluate_packs(
+        db, org_id=org.id, action=action, payload=payload, features=features
+    )
+    allowed = tier_allows_action(
+        output.tier, fail_mode=org.fail_mode, allowed=output.allowed
+    )
+    return derive_status(
+        allowed=allowed,
+        tier=combined_tier(output.tier, findings),
+        findings=[f.to_dict() for f in findings],
+    )
 
 
 def run_precheck(
@@ -130,6 +170,42 @@ def run_precheck(
             policy_reasons=list(output.reasons),
             blocked=not allowed,
         )
+
+    # Semantic rewrite: only for FLAGGED verdicts whose plan left judgement
+    # calls unresolved (a rewrite cannot cure a denied ACTION, and mechanical
+    # fixes need no model). Each draft is re-judged by THIS engine before it is
+    # offered — the model proposes, the deterministic gate disposes.
+    if (
+        status == STATUS_FLAGGED
+        and remediation_plan is not None
+        and remediation_plan["unresolved"]
+    ):
+        policy_rules_list = (
+            policy.rules.get("rules") if isinstance(policy.rules, dict) else None
+        )
+        for _attempt in range(rewrite.REWRITE_MAX_ATTEMPTS):
+            draft = rewrite.draft_rewrite(
+                payload=payload,
+                findings=finding_dicts,
+                unresolved=remediation_plan["unresolved"],
+                policy_rules=policy_rules_list,
+            )
+            if draft is None:
+                break  # feature absent, model trouble, or unparseable — move on
+            if _unrecorded_status(
+                db, org=org, action=action, payload=draft["output"], policy=policy
+            ) == STATUS_COMPLIANT:
+                remediation_plan = remediation.attach_rewrite(
+                    remediation_plan,
+                    {
+                        **draft,
+                        "evaluation": "compliant",
+                        # The gate verified the TEXT; whether the output truly
+                        # changed nature (advice -> commentary) is a human call.
+                        "requires_human_confirmation": draft["reclassified"],
+                    },
+                )
+                break
 
     decision_payload: dict[str, Any] = {
         "action": action,

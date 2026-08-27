@@ -7,3 +7,6 @@ alembic>=1.14.0
 pydantic-settings>=2.6.0
 requests>=2.32.0
 rfc3161-client>=1.0.6
+# Semantic rewrite drafting (app/services/rewrite.py). The feature is
+# flag-gated on ANTHROPIC_API_KEY; without the key it simply does not exist.
+anthropic>=1.1.0
