@@ -10,7 +10,7 @@ Only dependency: `requests`.
 
 ```bash
 # From a wheel your Attest contact gives you:
-pip install attest_sdk-0.1.0-py3-none-any.whl
+pip install attest_sdk-0.2.0-py3-none-any.whl
 
 # ...or directly from the repo:
 pip install "git+https://github.com/shaundytradesfx/govproject01.git@claude/zealous-archimedes-8i4x3i"
@@ -74,6 +74,52 @@ if result.flagged and result.has_fix:
 A "fix" that still flags leaves the original flag open — the attempt is never
 the cure. Remediation calls are never queued during an outage: the link must be
 validated against the real chain, so retry when Attest is back.
+
+**Verified rewrites.** When the violation is a judgement call the mechanical
+planner can't cure (individualised advice that should be general commentary),
+the verdict may also carry `result.rewrite` — a model-drafted revision that
+Attest's *deterministic* engine already re-judged compliant before offering
+("checked, not hoped"), with the drafting model and prompt hash sealed into the
+signed decision. Apply it with `result.apply_rewrite()` and re-gate with
+`remediates=`, exactly like any fix. If `requires_human_confirmation` is true,
+the draft changed what the output *is* — have a person confirm that first.
+
+### Choosing per tier: auto-fix or human? (`auto_remediate`)
+
+You decide, per risk tier, whether this client applies a verified cure itself
+or leaves every fix to a person. The recommended shape for most institutions —
+routine tiers self-heal, serious ones need clearance:
+
+```python
+attest = AttestClient(
+    api_key="YOUR_API_KEY", base_url="YOUR_SERVICE_URL",
+    auto_remediate={"yellow": "auto", "orange": "auto", "red": "human"},
+)
+
+result = attest.gate({"output": answer})
+if result.auto_remediation and result.auto_remediation["applied"]:
+    # The flag AND its cure are already sealed in the chain; result is the
+    # final verdict on the fixed output (usually compliant).
+    answer = ...  # adopt the cured output your gate() call returned the verdict for
+```
+
+With a tier set to `"auto"`, a flagged verdict at that tier whose fix is
+**complete and gate-verified** is applied and re-gated inside the same
+`gate()` call. You get back the *second* verdict, annotated with
+`result.auto_remediation` (`cure` is `"deterministic"` or `"rewrite"`, and
+`remediated_seq` names the flagged decision it closed). The original flag is
+still in the sealed history — auto mode changes who presses the button, never
+what gets recorded. The default (no `auto_remediate`) is `"human"` for every
+tier: suggest-only, exactly as above.
+
+Three lines auto mode never crosses, whatever you configure:
+
+- **Blocked verdicts.** Your own policy denied the action; no client setting
+  re-opens that. (Red flags route through your approval workflow as usual.)
+- **Rewrites marked `requires_human_confirmation`.** The draft changed what
+  the output *is* — only a person can confirm that.
+- **Incomplete cures.** If anything is `unresolved` or evidence is still
+  required, auto-applying would just re-flag; the case stays with a human.
 
 **Grouping steps.** By default each call is its own record. To tell one story
 across several steps, pass the trace from the first call:

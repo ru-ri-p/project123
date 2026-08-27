@@ -844,3 +844,26 @@ volume = single-digit $/mo; 5k outputs/day at ~5% semantic-path = ~$85/mo Opus.
 PRIVACY LINE FOR CONTRACTS: customer output transits the Anthropic API inline,
 pre-encryption; dark orgs are inline-or-never. Needs a consent line before any
 real (non-synthetic) customer data flows.
+
+--- 2026-08-27 (cont.) — SDK per-tier auto-remediation (task #9) ---
+Founder asked: clients (e.g. TradeEasy) choose per tier (yellow/orange/red)
+whether flagged events are auto-rewritten or need human clearance, in the SDK.
+Built: AttestClient(auto_remediate={"yellow":"auto","orange":"auto","red":"human"})
+- Default {} = every tier "human" = old suggest-only behaviour, byte-identical.
+- "auto" tier + flagged verdict + COMPLETE gate-verified cure -> the client
+  applies it and re-gates with remediates= inside the same gate() call;
+  returns the SECOND verdict annotated with GateResult.auto_remediation
+  {applied, cure: deterministic|rewrite, remediated_seq, original_tier/status}.
+- Cure preference: verified rewrite (server already re-judged compliant)
+  unless requires_human_confirmation; else deterministic revised_output only
+  when unresolved AND requirements are both empty.
+- Never crossed: blocked verdicts; requires_human_confirmation rewrites;
+  incomplete cures; offline/provisional verdicts. Re-gate outage -> returns
+  the recorded flag with auto_remediation.applied=false + error (no phantom).
+- No loops: second call carries remediates=, which suppresses further auto.
+- Server unchanged: this is CLIENT-side configuration; Attest still only
+  suggests and records. The flag stays sealed either way.
+Tests: tests/test_sdk_auto_remediate.py (10, monkeypatched requests.post
+sequence). Full suite 234 passed. Version bumped 0.1.0 -> 0.2.0, wheel rebuilt
+(attest_sdk-0.2.0-py3-none-any.whl) for the TradeEasy package. README gained
+"Choosing per tier" + verified-rewrites sections.

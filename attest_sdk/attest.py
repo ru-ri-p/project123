@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
@@ -51,6 +52,7 @@ class AttestClient:
         server_timeout: float = DEFAULT_SERVER_TIMEOUT,
         offline_enabled: bool = True,
         state_dir: str | Path | None = None,
+        auto_remediate: dict[str, str] | None = None,
     ) -> None:
         self.api_key = api_key
         self.base_url = base_url.rstrip("/")
@@ -72,6 +74,32 @@ class AttestClient:
         self._bundle_cache: OfflineBundle | None = None
         self._device_registered = False
         self._prepared = False
+        # Per-tier remediation policy — YOUR configuration, applied by YOUR
+        # process. "auto": when a flagged verdict at that tier carries a
+        # COMPLETE, gate-verified cure, this client applies it and re-gates it
+        # in the same call, returning the final (usually compliant) verdict —
+        # with the original flag still sealed in the chain. "human" (the
+        # default for every tier): fixes are suggested only, exactly as if
+        # this option did not exist.
+        #
+        # Recommended for most institutions:
+        #   auto_remediate={"yellow": "auto", "orange": "auto", "red": "human"}
+        #
+        # Three lines auto mode never crosses, whatever you configure:
+        #   - blocked verdicts (your own policy denied the action);
+        #   - rewrites marked requires_human_confirmation (the draft changed
+        #     what the output IS — only a person can confirm that);
+        #   - incomplete cures (unresolved findings or missing-evidence
+        #     requirements) — auto-applying those would just re-flag.
+        valid = {"auto", "human"}
+        config = auto_remediate or {}
+        bad = {k: v for k, v in config.items()
+               if k not in ("yellow", "orange", "red") or v not in valid}
+        if bad:
+            msg = ("auto_remediate entries must map yellow/orange/red to "
+                   f"'auto' or 'human'; got {bad}")
+            raise ValueError(msg)
+        self.auto_remediate = config
 
     def gate(
         self,
@@ -155,7 +183,102 @@ class AttestClient:
         data: dict[str, Any] = response.json()
         # Back up: hand over anything buffered during the outage we just left.
         self._drain_offline()
-        return GateResult.from_response(data)
+        result = GateResult.from_response(data)
+        if remediates is None:
+            # A remediation submission is itself never auto-remediated: if the
+            # cure still flags, that verdict comes back honestly — no loops.
+            cured = self._maybe_auto_remediate(
+                result, action=action, policy_version=policy_version, on_error=on_error
+            )
+            if cured is not None:
+                return cured
+        return result
+
+    def _maybe_auto_remediate(
+        self,
+        first: GateResult,
+        *,
+        action: str,
+        policy_version: str | None,
+        on_error: str,
+    ) -> GateResult | None:
+        """Apply and re-gate a complete, verified cure when configured to.
+
+        Runs only for a FLAGGED verdict whose tier this org set to "auto".
+        Blocked verdicts, human-confirmation rewrites, and incomplete cures are
+        never auto-applied (see the constructor's contract). Returns the second
+        gate's result annotated with `auto_remediation`, or None to hand back
+        the first verdict untouched.
+        """
+        if not first.flagged:
+            return None
+        if self.auto_remediate.get(first.tier or "") != "auto":
+            return None
+        if first.offline or not first.trace_id or first.decision_seq is None:
+            # An offline/provisional verdict carries no server-verified fix,
+            # and without a decision_seq there is nothing to remediate against.
+            return None
+
+        cure, kind = self._complete_cure(first)
+        if cure is None:
+            return None
+
+        second = self.gate(
+            cure,
+            action=action,
+            trace=first.trace_id,
+            policy_version=policy_version,
+            remediates=first.decision_seq,
+            on_error=on_error,
+        )
+        if not second.evaluated:
+            # The re-gate did not land (outage mid-loop). The flag stands and
+            # is already sealed; hand it back with the attempt made visible so
+            # the caller can retry the remediation explicitly.
+            return dataclasses.replace(
+                first,
+                auto_remediation={
+                    "applied": False,
+                    "cure": kind,
+                    "remediated_seq": first.decision_seq,
+                    "original_tier": first.tier,
+                    "original_status": first.status,
+                    "error": second.error,
+                },
+            )
+        return dataclasses.replace(
+            second,
+            auto_remediation={
+                "applied": True,
+                "cure": kind,
+                "remediated_seq": first.decision_seq,
+                "original_tier": first.tier,
+                "original_status": first.status,
+            },
+        )
+
+    @staticmethod
+    def _complete_cure(first: GateResult) -> tuple[dict[str, Any] | None, str | None]:
+        """The one cure safe to apply unattended, or (None, None).
+
+        A gate-verified rewrite wins (it exists precisely because judgement
+        calls were involved, and the server already re-judged it compliant) —
+        unless it requires human confirmation. Otherwise the deterministic
+        revision qualifies only when it cures EVERYTHING: any unresolved
+        finding or missing-evidence requirement means auto-applying would just
+        re-flag, so a human keeps the case.
+        """
+        fix = first.suggested_fix or {}
+        rw = fix.get("rewrite")
+        if rw and rw.get("output") and not rw.get("requires_human_confirmation"):
+            return dict(rw["output"]), "rewrite"
+        if (
+            fix.get("revised_output")
+            and not fix.get("unresolved")
+            and not fix.get("requirements")
+        ):
+            return dict(fix["revised_output"]), "deterministic"
+        return None, None
 
     # --- offline resilience ------------------------------------------------
 

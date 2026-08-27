@@ -52,6 +52,12 @@ class GateResult:
     suggested_fix: dict[str, Any] | None = None
     # Set when this result judged a revision submitted with remediates=.
     remediation_of: int | None = None
+    # Present only when THIS CLIENT auto-applied a cure under the org's
+    # auto_remediate configuration: {"applied": bool, "cure": "rewrite"|
+    # "deterministic", "remediated_seq": <flagged decision>, "original_tier",
+    # "original_status"}. The original flag stays sealed in the chain — this
+    # annotation just tells your code the round trip already happened.
+    auto_remediation: dict[str, Any] | None = None
 
     # --- convenience -------------------------------------------------------
 
