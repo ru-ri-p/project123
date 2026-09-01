@@ -68,11 +68,13 @@ def resolve_approval(
     *,
     status: str,
     approver_id: str,
+    approver_kind: str = "asserted",
     comment: str | None,
     resolved_at: datetime,
 ) -> Approval:
     approval.status = status
     approval.approver_id = approver_id
+    approval.approver_kind = approver_kind
     approval.comment = comment
     approval.resolved_at = resolved_at
     db.flush()

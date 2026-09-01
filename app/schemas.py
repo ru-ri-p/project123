@@ -113,6 +113,10 @@ class ApprovalOut(BaseModel):
     event_id: str | None
     status: str
     approver_id: str | None
+    # "authenticated" (a signed-in person; approver_id is their verified
+    # email) | "asserted" (name supplied over the org machine key) | None
+    # (resolved before the distinction existed).
+    approver_kind: str | None = None
     comment: str | None
     created_at: str
     resolved_at: str | None
@@ -120,7 +124,9 @@ class ApprovalOut(BaseModel):
 
 class ApprovalResolveIn(BaseModel):
     status: Literal["approved", "denied"]
-    approver_id: str = Field(min_length=1)
+    # Required on the machine-key path; IGNORED for a signed-in person, whose
+    # verified identity is recorded instead of anything the body claims.
+    approver_id: str | None = Field(default=None, min_length=1)
     comment: str | None = None
 
 

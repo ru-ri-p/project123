@@ -7,7 +7,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_authenticated_org
+from app.api.deps import Actor, get_actor, get_authenticated_org
 from app.db.models import Org
 from app.db.session import get_db
 from app.repositories import approvals as approval_repo
@@ -31,6 +31,7 @@ def _to_out(approval: object) -> ApprovalOut:
         event_id=str(approval.event_id) if approval.event_id else None,
         status=approval.status,
         approver_id=approval.approver_id,
+        approver_kind=approval.approver_kind,
         comment=approval.comment,
         created_at=approval.created_at.isoformat(),
         resolved_at=approval.resolved_at.isoformat() if approval.resolved_at else None,
@@ -75,21 +76,44 @@ def get_approval(
 def resolve(
     approval_id: str,
     body: ApprovalResolveIn,
-    org: Org = Depends(get_authenticated_org),
+    actor: Actor = Depends(get_actor),
     db: Session = Depends(get_db),
 ) -> ApprovalResolveOut:
+    """Resolve as a signed-in person (identity PROVEN, recorded from the
+    session — anything the body claims is ignored) or over the org machine
+    key (legacy/SDK path: approver_id required, recorded as asserted)."""
     try:
         approval_uuid = uuid.UUID(approval_id)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail="invalid approval_id") from exc
 
+    approver_user_id = approver_display = None
+    if actor.user is not None:
+        if actor.user.role not in ("admin", "officer"):
+            raise HTTPException(
+                status_code=403, detail="viewer role cannot resolve approvals"
+            )
+        approver_id, approver_kind = actor.user.email, "authenticated"
+        approver_user_id = str(actor.user.id)
+        approver_display = actor.user.display_name
+    else:
+        if not body.approver_id:
+            raise HTTPException(
+                status_code=422,
+                detail="approver_id required when resolving with an API key",
+            )
+        approver_id, approver_kind = body.approver_id, "asserted"
+
     try:
         result = resolve_approval(
             db,
-            org_id=org.id,
+            org_id=actor.org.id,
             approval_id=approval_uuid,
             status=body.status,
-            approver_id=body.approver_id,
+            approver_id=approver_id,
+            approver_kind=approver_kind,
+            approver_user_id=approver_user_id,
+            approver_display=approver_display,
             comment=body.comment,
         )
         db.commit()

@@ -937,3 +937,26 @@ exactly what a reset proves — one mechanism, two jobs).
   lockout even for the right password + reset-by-code bypass, current-pw
   requirement, other-session slaughter on change, policy on set not login,
   counter durability + hash-only-at-rest assertion). Suite: 252 passed.
+
+--- 2026-09-01 (cont.) — named-person approvals (task #12) ---
+Approvals now resolvable by a SIGNED-IN person; the chain records verified
+identity. Mirror still pending founder's MIRROR_TOKEN secret update (deploy
+repo stuck at ced9f0f until then; expired token diagnosed from Action logs).
+- approvals.approver_kind (migration d9e2f5a48c31): "authenticated" (session
+  user; approver_id = verified email) | "asserted" (machine-key path, name
+  merely claimed) | NULL (historical).
+- deps.Actor + get_actor: session (bearer/cookie) preferred over x-api-key;
+  invalid session fails 401 LOUDLY, never falls back to machine auth.
+- /v1/approvals/{id}/resolve: session path ignores body approver_id (cannot
+  approve as someone else); viewer role 403; machine path requires
+  approver_id (422 otherwise), labeled asserted.
+- LESSON CAUGHT BY TEST: record_event PII-redacts stored payloads, so an
+  email in the approval_action payload became [REDACTED:email]. Correct
+  design adopted: chain seals approver_user_id (UUID) + approver_display —
+  durable non-PII identity; the email lives in the approvals ROW only.
+- tests/test_named_approvals.py: 8 attack tests (identity-from-session,
+  body-name ignored, no-raw-PII-in-chain + replay verified, viewer 403,
+  asserted labeling, anonymous machine 422, cross-org 404, dead session 401
+  no-fallback). Suite: 260 passed.
+NEXT in auth track: login page UI (app/static/login.html) + console session
+awareness; then email provider when domain exists.

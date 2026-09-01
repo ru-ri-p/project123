@@ -30,6 +30,9 @@ def resolve_approval(
     approval_id: uuid.UUID,
     status: str,
     approver_id: str,
+    approver_kind: str = "asserted",
+    approver_user_id: str | None = None,
+    approver_display: str | None = None,
     comment: str | None,
 ) -> dict[str, str | int]:
     if status not in APPROVAL_STATUSES:
@@ -48,6 +51,7 @@ def resolve_approval(
         approval,
         status=status,
         approver_id=approver_id,
+        approver_kind=approver_kind,
         comment=comment,
         resolved_at=resolved_at,
     )
@@ -57,18 +61,34 @@ def resolve_approval(
     events = event_repo.events_for_trace(db, org_id, approval.trace_id)
     next_seq = events[-1].seq + 1 if events else 1
 
+    # Sealed with the decision: whether this identity was PROVEN (a signed-in
+    # person) or merely claimed over the org's machine key. An auditor
+    # weighing the approval needs that difference tamper-evident too.
+    #
+    # Identity in the chain is deliberately NON-PII: record_event redacts
+    # emails from stored payloads (data minimisation), so an email put here
+    # would survive only as [REDACTED:email]. The durable identity is the
+    # user's UUID + display name; the approvals row keeps the email for
+    # day-to-day display under normal access control.
+    payload: dict[str, str] = {
+        "approval_id": str(approval_id),
+        "status": status,
+        "approver_id": approver_id,
+        "approver_kind": approver_kind,
+        "comment": comment or "",
+    }
+    if approver_user_id is not None:
+        payload["approver_user_id"] = approver_user_id
+    if approver_display is not None:
+        payload["approver_display"] = approver_display
+
     event_result = record_event(
         db,
         org_id=org_id,
         trace_id=approval.trace_id,
         seq=next_seq,
         event_type="approval_action",
-        payload={
-            "approval_id": str(approval_id),
-            "status": status,
-            "approver_id": approver_id,
-            "comment": comment or "",
-        },
+        payload=payload,
         policy_version=None,
     )
 

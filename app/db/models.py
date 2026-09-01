@@ -187,6 +187,11 @@ class Approval(Base):
     )
     status: Mapped[str] = mapped_column(String(16), nullable=False, server_default="pending")
     approver_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # How the approver's identity was established: "authenticated" (a signed-in
+    # user resolved it; approver_id is their verified email) or "asserted" (the
+    # org's machine key resolved it and TOLD us a name — legacy/SDK path).
+    # Evidence-weight differs; the chain event records the same distinction.
+    approver_kind: Mapped[str | None] = mapped_column(String(16), nullable=True)
     comment: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
