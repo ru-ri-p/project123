@@ -881,3 +881,36 @@ evidence, drop-in compliance.py reference, smoke test). Placeholder key only.
 Anthropic key guidance to founder: key lives on OUR Render service (attest-api
 env ANTHROPIC_API_KEY), never TradeEasy's side; spend cap in Anthropic console;
 consent/disclosure line before real customer data transits the model API.
+
+--- 2026-09-01 — human auth pipeline (task #10), dev-mode, no domain needed ---
+Founder pivoting to website track; asked how auth works with no domain/paid
+services and to "have the pipeline ready and check with dummy values first".
+Built passwordless email+code auth for the future client dashboard:
+- Models + migration b6c9d2e14f70: users (globally-unique email, role
+  admin|officer|viewer, disabled), login_codes (sha256 hash only, attempts,
+  expiry), auth_sessions (sha256 of 256-bit token, expiry, revoked_at).
+  NO password column anywhere, by design.
+- app/services/human_auth.py: request_code (no user enumeration — None for
+  unknown/capped and route answers identically; new code voids old; max 3
+  codes per 10-min window), verify_code (attempt spent BEFORE compare, cap 5,
+  single-use, constant-time compare), session_user, revoke_session,
+  create_user. Env knobs AUTH_CODE_TTL_MINUTES/_MAX_ATTEMPTS/
+  AUTH_SESSION_TTL_HOURS/AUTH_CODES_PER_WINDOW.
+- app/api/humans.py: /v1/auth/request-code (503 in prod until TODO(EMAIL)
+  provider exists — fails loudly, never silently; AUTH_DEV_MODE=1 returns
+  dev_code inline for tests/dev ONLY), /verify (HttpOnly cookie
+  attest_session + token in body), /me, /logout, admin provisioning
+  /v1/auth/admin/orgs/{org}/users (x-admin-key; 409 dup, 422 bad role).
+- tests/test_human_auth.py: 11 attack tests (enumeration, burn-on-attempts,
+  single-use, void-on-reissue, issuance cap, revocation, expiry, loud 503,
+  admin-only provisioning, disabled user fully dead). Suite: 245 passed.
+NOT yet done: console login UI; wiring approver identity to sessions
+(resolve_approval still takes approver_id string); recording auth events in
+the chain; email provider (needs domain + SPF/DKIM).
+Env note: container restart only kills the postgres PROCESS now; data dir,
+venv, keys survive. Restart: su postgres -c "pg_ctl -D /tmp/pg5433 -o '-p
+5433' -l /tmp/pg5433/log start" (WITHOUT -o it comes up on 5432 and
+everything skips).
+No Attest-website design exists in the artifact gallery yet (checked; only
+TradeEasy artifacts). claude.ai/design projects are not visible from Claude
+Code sessions.

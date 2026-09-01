@@ -10,6 +10,7 @@ from app.api.approvals import router as approvals_router
 from app.api.erasure import router as erasure_router
 from app.api.events import router as events_router
 from app.api.gate import router as gate_router
+from app.api.humans import router as humans_router
 from app.api.mitigations import router as mitigations_router
 from app.api.orgs import router as orgs_router
 from app.api.policies import router as policies_router
@@ -46,6 +47,7 @@ app.include_router(policies_router)
 app.include_router(mitigations_router)
 app.include_router(access_router)
 app.include_router(admin_router)
+app.include_router(humans_router)
 
 
 _CONSOLE = Path(__file__).parent / "static" / "console.html"

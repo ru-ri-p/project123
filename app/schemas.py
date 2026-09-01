@@ -637,3 +637,36 @@ class SupplyTextIn(BaseModel):
         description="Where it came from — e.g. 'downloaded the PDF from difc.com'.",
     )
     auto_publish: bool = True
+
+
+# --- human auth (dashboard logins) -----------------------------------------
+
+
+class AuthRequestCodeIn(BaseModel):
+    email: str = Field(min_length=3, max_length=320)
+
+
+class AuthVerifyIn(BaseModel):
+    email: str = Field(min_length=3, max_length=320)
+    code: str = Field(min_length=6, max_length=6, pattern=r"^\d{6}$")
+
+
+class AuthUserOut(BaseModel):
+    email: str
+    display_name: str
+    role: str
+    org_id: str
+
+
+class AuthSessionOut(BaseModel):
+    user: AuthUserOut
+    # Also set as an HttpOnly cookie; returned in the body for API clients
+    # and tests. Treat it like a password: never log it.
+    token: str
+    expires_at: str
+
+
+class AdminCreateUserIn(BaseModel):
+    email: str = Field(min_length=3, max_length=320)
+    display_name: str = Field(min_length=1, max_length=200)
+    role: str = Field(default="officer", pattern=r"^(admin|officer|viewer)$")

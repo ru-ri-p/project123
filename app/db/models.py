@@ -605,3 +605,71 @@ class OrgSigningKey(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
+
+
+class User(Base):
+    """A named human at a customer org — dashboard identity, distinct from
+    machine auth (the org API key). Approvals and confirmations should trace to
+    a PERSON; this is that person. Login is passwordless (email + one-time
+    code), so there is deliberately no password column to protect."""
+
+    __tablename__ = "users"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    org_id: Mapped[str] = mapped_column(Text, ForeignKey("orgs.id"), nullable=False, index=True)
+    # Globally unique: a login starts from an email alone, so it must name one
+    # person at one org. The same human at two orgs uses two addresses.
+    email: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    display_name: Mapped[str] = mapped_column(Text, nullable=False)
+    # admin (manage users/policy) | officer (approve, confirm rewrites) |
+    # viewer (read-only). Enforced at the route layer.
+    role: Mapped[str] = mapped_column(String(16), nullable=False, server_default="officer")
+    disabled: Mapped[bool] = mapped_column(nullable=False, server_default="false")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class LoginCode(Base):
+    """One-time login code. Only the SHA-256 of the code is stored, it expires
+    in minutes, dies on first use, and locks after a few wrong attempts — the
+    combination that makes a 6-digit space safe enough for its lifetime."""
+
+    __tablename__ = "login_codes"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True
+    )
+    code_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class AuthSession(Base):
+    """A browser session. The bearer token is random (256-bit) and stored only
+    as its SHA-256, so a database read never yields a usable session. Revocation
+    is a column write — logout works even if the cookie survives."""
+
+    __tablename__ = "auth_sessions"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True
+    )
+    token_hash: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
