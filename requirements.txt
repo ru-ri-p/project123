@@ -10,3 +10,4 @@ rfc3161-client>=1.0.6
 # Semantic rewrite drafting (app/services/rewrite.py). The feature is
 # flag-gated on ANTHROPIC_API_KEY; without the key it simply does not exist.
 anthropic>=1.1.0
+argon2-cffi==25.1.0  # password hashing (argon2id) for dashboard logins — pinned, supply-chain discipline

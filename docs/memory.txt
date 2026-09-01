@@ -914,3 +914,26 @@ everything skips).
 No Attest-website design exists in the artifact gallery yet (checked; only
 TradeEasy artifacts). claude.ai/design projects are not visible from Claude
 Code sessions.
+
+--- 2026-09-01 (cont.) — password login (task #11), founder's choice ---
+Founder chose email+password over passwordless-only. Built on the same
+session infrastructure; code flow KEPT as invitation/reset (inbox custody is
+exactly what a reset proves — one mechanism, two jobs).
+- users += password_hash (argon2id via argon2-cffi==25.1.0, pinned),
+  failed_logins, locked_until. auth_sessions += method ('code'|'password').
+  Migration c8d4e7f31a92.
+- Policy: 12-128 chars, no composition rules (NIST 800-63B), not your email.
+  TODO(BREACH-LIST) for a breached-password screen.
+- login_password: generic None for unknown/unset/wrong/locked/disabled;
+  dummy argon2 burn equalizes timing for unknown emails; lockout 5 fails ->
+  15 min (durable, DB); codes bypass lockout (owner never fully locked out);
+  transparent rehash on parameter upgrades.
+- set_password custody rule: password-earned session MUST supply current
+  password (stolen cookie can't take over the account); code-earned session
+  need not (that IS the reset). Change revokes every OTHER session.
+- Routes: POST /v1/auth/login, POST /v1/auth/set-password. Env knobs
+  AUTH_LOCKOUT_THRESHOLD/AUTH_LOCKOUT_MINUTES.
+- tests/test_password_login.py: 7 attack tests (generic 401 equality,
+  lockout even for the right password + reset-by-code bypass, current-pw
+  requirement, other-session slaughter on change, policy on set not login,
+  counter durability + hash-only-at-rest assertion). Suite: 252 passed.

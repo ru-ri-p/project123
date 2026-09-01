@@ -670,3 +670,17 @@ class AdminCreateUserIn(BaseModel):
     email: str = Field(min_length=3, max_length=320)
     display_name: str = Field(min_length=1, max_length=200)
     role: str = Field(default="officer", pattern=r"^(admin|officer|viewer)$")
+
+
+class AuthLoginIn(BaseModel):
+    email: str = Field(min_length=3, max_length=320)
+    # No minimum here: login must accept whatever was set; policy applies
+    # only when SETTING a password.
+    password: str = Field(min_length=1, max_length=128)
+
+
+class AuthSetPasswordIn(BaseModel):
+    new_password: str = Field(min_length=12, max_length=128)
+    # Required when the session was earned by password; a code-earned session
+    # (invitation/reset — inbox custody already proven) sets one without it.
+    current_password: str | None = Field(default=None, max_length=128)

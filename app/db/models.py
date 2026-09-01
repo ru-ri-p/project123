@@ -626,6 +626,16 @@ class User(Base):
     # admin (manage users/policy) | officer (approve, confirm rewrites) |
     # viewer (read-only). Enforced at the route layer.
     role: Mapped[str] = mapped_column(String(16), nullable=False, server_default="officer")
+    # Argon2id hash, or NULL until the person sets one (invitation flow: a
+    # one-time emailed code proves inbox custody, then they choose a password).
+    # Only ever the hash — the password itself exists nowhere on this side.
+    password_hash: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Online-guessing brake: failures count up, a threshold locks the account
+    # for a cooling-off window, success resets. All server-side and durable.
+    failed_logins: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    locked_until: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     disabled: Mapped[bool] = mapped_column(nullable=False, server_default="false")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
@@ -668,6 +678,9 @@ class AuthSession(Base):
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True
     )
     token_hash: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    # How this session was earned: "code" (proved inbox custody — may SET a
+    # password without knowing the old one, i.e. the reset path) or "password".
+    method: Mapped[str] = mapped_column(String(16), nullable=False, server_default="code")
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(

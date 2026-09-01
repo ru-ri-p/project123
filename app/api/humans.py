@@ -18,8 +18,10 @@ from app.db.models import User
 from app.db.session import get_db
 from app.schemas import (
     AdminCreateUserIn,
+    AuthLoginIn,
     AuthRequestCodeIn,
     AuthSessionOut,
+    AuthSetPasswordIn,
     AuthUserOut,
     AuthVerifyIn,
 )
@@ -36,6 +38,17 @@ def _bearer_token(
     if authorization and authorization.lower().startswith("bearer "):
         return authorization[7:].strip()
     return cookie_token or ""
+
+
+def _set_session_cookie(response: Response, token: str) -> None:
+    response.set_cookie(
+        SESSION_COOKIE,
+        token,
+        httponly=True,
+        samesite="lax",
+        secure=not human_auth.dev_mode(),
+        max_age=human_auth.SESSION_TTL_HOURS * 3600,
+    )
 
 
 def _user_out(user: User) -> AuthUserOut:
@@ -78,17 +91,61 @@ def verify(
     if result is None:
         raise HTTPException(status_code=401, detail="invalid or expired code")
     user, token, expires_at = result
-    response.set_cookie(
-        SESSION_COOKIE,
-        token,
-        httponly=True,
-        samesite="lax",
-        secure=not human_auth.dev_mode(),
-        max_age=human_auth.SESSION_TTL_HOURS * 3600,
-    )
+    _set_session_cookie(response, token)
     return AuthSessionOut(
         user=_user_out(user), token=token, expires_at=expires_at.isoformat()
     )
+
+
+@router.post("/login", response_model=AuthSessionOut)
+def login(
+    body: AuthLoginIn, response: Response, db: Session = Depends(get_db)
+) -> AuthSessionOut:
+    """Email + password. One generic 401 for every failure mode — unknown
+    email, no password set, wrong password, locked, disabled — so nothing is
+    learnable from the error. Lockout details live in the service."""
+    result = human_auth.login_password(db, body.email, body.password)
+    db.commit()  # failed attempts / lockouts must persist even on 401
+    if result is None:
+        raise HTTPException(status_code=401, detail="invalid email or password")
+    user, token, expires_at = result
+    _set_session_cookie(response, token)
+    return AuthSessionOut(
+        user=_user_out(user), token=token, expires_at=expires_at.isoformat()
+    )
+
+
+@router.post("/set-password")
+def set_password(
+    body: AuthSetPasswordIn,
+    db: Session = Depends(get_db),
+    authorization: str | None = Header(default=None),
+    attest_session: str | None = Cookie(default=None),
+) -> dict[str, bool]:
+    """Set (first time / after reset-by-code) or change (knowing the current
+    one) the signed-in user's password. Every other session is revoked."""
+    found = human_auth.session_with_user(
+        db, _bearer_token(authorization, attest_session)
+    )
+    if found is None:
+        raise HTTPException(status_code=401, detail="not signed in")
+    user, session = found
+    try:
+        human_auth.set_password(
+            db,
+            user=user,
+            session=session,
+            new_password=body.new_password,
+            current_password=body.current_password,
+        )
+    except human_auth.PasswordPolicyError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    except human_auth.WrongCurrentPasswordError:
+        raise HTTPException(
+            status_code=403, detail="current password required and must match"
+        ) from None
+    db.commit()
+    return {"ok": True}
 
 
 @router.get("/me", response_model=AuthUserOut)
