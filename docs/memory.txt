@@ -984,3 +984,32 @@ awareness; then email provider when domain exists.
   sign out -> password sign-in; screenshots sent to founder. Suite: 266.
 Auth track now complete through UI. Remaining: email provider (domain),
 MFA/SSO later. Mirror STILL RED awaiting MIRROR_TOKEN secret update.
+
+--- 2026-09-02 — officer work queue (task #14) ---
+- app/services/workqueue.py + GET /v1/workqueue (session or key): three kinds
+  of open work, three different jobs. pending_approvals joined to the LATEST
+  decision in their trace (officer sees action/tier/status, not just an id;
+  oldest first). open_flags = status flagged, remediated_by_seq NULL,
+  remediation_of NULL (cure ATTEMPTS are not new work). rewrite_confirmations
+  = open flags with has_rewrite + rewrite_reclassified. Index data only —
+  works for customer-key orgs.
+- Console: "Work Queue" is now the FIRST nav item and the default screen,
+  with a count badge. Approve/Deny per approval row + optional comment;
+  signed-in officer resolves one-click (toast: "Approved as <name>
+  (verified)"); key-mode shows a name box (recorded as asserted, with a
+  nudge to /login); viewer sessions see read-only. Rewrite/flag rows explain
+  the fix ships from the customer's application (apply_rewrite/re-gate).
+- BUG CAUGHT IN BROWSER: duplicate `const TIERCHIP` (compliance screen
+  already declares it) killed the whole console script — Playwright pageerror
+  surfaced it; removed my duplicate. Lesson: console.html is ONE script
+  scope; grep for identifiers before adding module-level consts.
+- Also hit our own issuance cap during repeated smoke runs (3 codes/window)
+  — cleared demo rows via psql; the brake works.
+- tests/test_workqueue.py: 5 (three kinds present w/ context + counts;
+  finished work leaves the queue; failed cure attempt is not new work;
+  org-scoped; opens for cookie session). Suite: 271 passed. Browser smoke
+  (scratchpad/queue_smoke.py): sign-in -> queue -> approve as verified
+  person -> badge decrements; screenshots sent.
+Demo orgs on LOCAL db: org_queue_demo (key rotated in session, in shell
+history only), org_login_demo. Officer y.almansoori@example.test / amina.k@
+example.test (password "a sensible long password" — local dev only).

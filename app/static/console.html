@@ -191,7 +191,27 @@
 
   <div class="main" id="appui">
     <!-- ==================== OVERVIEW ==================== -->
-    <section class="screen on" id="scr-overview">
+    <!-- ==================== WORK QUEUE ==================== -->
+    <section class="screen on" id="scr-queue">
+      <h1>Work Queue</h1>
+      <div class="sub">Everything waiting on a person ·
+        <button class="btn" id="wq-refresh" style="padding:4px 12px;">Refresh</button></div>
+      <div id="wq-approver-row" style="display:none;margin-bottom:14px;">
+        <span class="kv2">Connected with an API key — type your name to resolve approvals
+          (recorded as <b>asserted</b>; sign in at <a href="/login" style="color:var(--blue);">/login</a>
+          to approve as a verified person):</span>
+        <input id="wq-approver" placeholder="Your name"
+               style="margin-top:6px;width:240px;border:1px solid var(--line3);border-radius:4px;padding:6px 9px;font:inherit;font-size:12.5px;display:block;">
+      </div>
+      <div class="eyebrow" style="margin:16px 0 8px;">APPROVALS WAITING FOR A DECISION</div>
+      <div class="card" id="wq-approvals"><div class="empty">Connect to load.</div></div>
+      <div class="eyebrow" style="margin:22px 0 8px;">VERIFIED REWRITES AWAITING CONFIRMATION</div>
+      <div class="card" id="wq-rewrites"><div class="empty">Connect to load.</div></div>
+      <div class="eyebrow" style="margin:22px 0 8px;">FLAGS AWAITING REMEDIATION</div>
+      <div class="card" id="wq-flags"><div class="empty">Connect to load.</div></div>
+    </section>
+
+    <section class="screen" id="scr-overview">
       <h1 id="ov-title">Overview</h1>
       <div class="sub">Your sealed record of AI actions · <span class="mono" id="ov-now"></span></div>
       <div id="ov-policybanner" style="display:none;" class="banner amber">
@@ -496,26 +516,98 @@ async function regrant(privKey, wrappedForOrgB64, granteePubKey) {
 let keypairPems = { priv: null, pub: null };
 
 /* ---------- nav ---------- */
-const SCREENS = [["overview","Overview"],["requests","Consent Requests"],["compliance","Compliance"],["trace","Audit Records"],["settings","Settings"],["keys","Keys & Custody"]];
+const SCREENS = [["queue","Work Queue"],["overview","Overview"],["requests","Consent Requests"],["compliance","Compliance"],["trace","Audit Records"],["settings","Settings"],["keys","Keys & Custody"]];
 function go(k) {
   document.querySelectorAll("nav.screens button").forEach((b) => b.classList.toggle("on", b.dataset.k === k));
   document.querySelectorAll(".screen").forEach((s) => s.classList.toggle("on", s.id === "scr-" + k));
 }
 $("#nav").innerHTML = SCREENS.map(([k,l]) =>
-  `<button data-k="${k}" class="${k==='overview'?'on':''}"><span class="dot"></span>${l}
-   ${k==='requests' ? '<span class="badge" id="navbadge" style="display:none;"></span>' : ''}</button>`).join("");
+  `<button data-k="${k}" class="${k==='queue'?'on':''}"><span class="dot"></span>${l}
+   ${k==='requests' ? '<span class="badge" id="navbadge" style="display:none;"></span>' : ''}
+   ${k==='queue' ? '<span class="badge" id="wqbadge" style="display:none;"></span>' : ''}</button>`).join("");
 document.querySelectorAll("nav.screens button").forEach((b) => b.addEventListener("click", () => go(b.dataset.k)));
 $("#ov-gotokeys").addEventListener("click", () => go("keys"));
 $("#ov-gotocompliance").addEventListener("click", () => go("compliance"));
 $("#ov-pendingstrip").addEventListener("click", () => go("requests"));
 
 /* ---------- connect + overview ---------- */
+/* ---------- work queue ---------- */
+let sessionUser = null;   // set by bootSession; null when connected by API key
+// tier -> chip colour uses the shared TIERCHIP declared with the compliance screen
+
+async function loadWorkQueue() {
+  try {
+    const q = await api.call("/v1/workqueue");
+    const badge = $("#wqbadge");
+    badge.textContent = q.counts.total;
+    badge.style.display = q.counts.total > 0 ? "inline-block" : "none";
+    $("#wq-approver-row").style.display =
+      (!sessionUser && q.counts.approvals > 0) ? "block" : "none";
+    const canAct = sessionUser === null || sessionUser.role !== "viewer";
+
+    $("#wq-approvals").innerHTML = q.pending_approvals.length ? q.pending_approvals.map((a) => `
+      <div class="rowline">
+        <span class="chip ${TIERCHIP[a.tier] || "grey"}">${esc((a.tier || "?").toUpperCase())}</span>
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:600;font-size:13.5px;">${esc(a.action || "action")}</div>
+          <div class="kv2 mono">trace ${esc(a.trace_id.slice(0, 8))}… · raised ${fmtT(a.created_at)}</div>
+        </div>
+        ${canAct ? `
+        <input class="wq-comment" data-id="${esc(a.approval_id)}" placeholder="Comment (optional)"
+               style="width:160px;border:1px solid var(--line3);border-radius:4px;padding:6px 8px;font:inherit;font-size:12px;">
+        <button class="btn" data-deny="${esc(a.approval_id)}">Deny</button>
+        <button class="btn primary" data-approve="${esc(a.approval_id)}">Approve</button>`
+        : '<span class="kv2">read-only</span>'}
+      </div>`).join("")
+      : '<div class="empty">Nothing waiting. Red and orange decisions land here when they need a person.</div>';
+    $("#wq-approvals").querySelectorAll("[data-approve]").forEach((b) =>
+      b.addEventListener("click", () => resolveFromQueue(b.dataset.approve, "approved")));
+    $("#wq-approvals").querySelectorAll("[data-deny]").forEach((b) =>
+      b.addEventListener("click", () => resolveFromQueue(b.dataset.deny, "denied")));
+
+    const flagRow = (f, note) => `
+      <div class="rowline">
+        <span class="chip ${TIERCHIP[f.tier] || "grey"}">${esc((f.tier || "?").toUpperCase())}</span>
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:600;font-size:13.5px;">${esc(f.action)} · decision seq ${f.seq}</div>
+          <div class="kv2">${esc(note)}</div>
+          <div class="kv2 mono">trace ${esc(f.trace_id.slice(0, 8))}… · ${fmtT(f.created_at)}</div>
+        </div>
+      </div>`;
+    $("#wq-rewrites").innerHTML = q.rewrite_confirmations.length ? q.rewrite_confirmations.map((f) =>
+      flagRow(f, `Drafted by ${(f.remediation || {}).rewrite_drafted_by || "model"}, gate-verified compliant, but it changed what the output IS — confirm, then adopt it in your application (SDK: apply_rewrite + re-gate).`)).join("")
+      : '<div class="empty">No verified rewrites awaiting confirmation.</div>';
+    $("#wq-flags").innerHTML = q.open_flags.length ? q.open_flags.map((f) =>
+      flagRow(f, `${f.findings_count} finding${f.findings_count === 1 ? "" : "s"} · the fix ships from your application: apply the suggestion and re-gate with remediates=.`)).join("")
+      : '<div class="empty">No open flags — every flagged output has a compliant fix on record.</div>';
+  } catch (e) { toast("Work queue failed: " + e.message, "err"); }
+}
+
+async function resolveFromQueue(id, status) {
+  const body = { status };
+  const c = document.querySelector(`.wq-comment[data-id="${id}"]`);
+  if (c && c.value.trim()) body.comment = c.value.trim();
+  if (!sessionUser) {
+    const name = $("#wq-approver").value.trim();
+    if (!name) { toast("Type your name first — an anonymous approval is refused.", "err"); return; }
+    body.approver_id = name;
+  }
+  try {
+    await api.call(`/v1/approvals/${id}/resolve`, { method: "POST", body });
+    toast((status === "approved" ? "Approved" : "Denied") +
+      (sessionUser ? ` as ${sessionUser.display_name} (verified)` : " (asserted)") +
+      " — sealed in the audit chain.", "ok");
+    loadWorkQueue();
+  } catch (e) { toast("Resolve failed: " + e.message, "err"); }
+}
+$("#wq-refresh").addEventListener("click", loadWorkQueue);
+
 function showConnected(ov, who) {
   $("#orgbadge").style.display = "block";
   $("#orgbadge").innerHTML = `<b>${esc(ov.name)}</b><br><span class="mono" style="font-size:11px;color:var(--faint);">${esc(ov.org_id)}</span>`;
   $("#connstate").textContent = "Connected.";
   $("#keyform").style.display = "none";
-  renderOverview(ov); loadRequests(); loadTraces(); renderCustody(ov); loadCompliance(); loadSettings(); maybeOnboard();
+  loadWorkQueue(); renderOverview(ov); loadRequests(); loadTraces(); renderCustody(ov); loadCompliance(); loadSettings(); maybeOnboard();
   toast("Connected as " + (who || ov.name), "ok");
 }
 async function connect() {
@@ -536,6 +628,7 @@ async function bootSession() {
     const me = await fetch("/v1/auth/me", { credentials: "same-origin" });
     if (!me.ok) return false;
     const user = await me.json();
+    sessionUser = user;
     api.key = "";  // never mix identities: session requests carry no key
     $("#userbadge").style.display = "block";
     $("#userbadge").innerHTML = `<b>${esc(user.display_name)}</b><br>` +

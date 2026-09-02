@@ -17,6 +17,7 @@ from app.api.policies import router as policies_router
 from app.api.precheck import router as precheck_router
 from app.api.sdk import router as sdk_router
 from app.api.traces import router as traces_router
+from app.api.workqueue import router as workqueue_router
 from app.config import get_settings
 from app.crypto.signing_provider import SigningKeyError, get_signing_provider
 from app.middleware.rate_limit import RateLimitMiddleware
@@ -48,6 +49,7 @@ app.include_router(mitigations_router)
 app.include_router(access_router)
 app.include_router(admin_router)
 app.include_router(humans_router)
+app.include_router(workqueue_router)
 
 
 _CONSOLE = Path(__file__).parent / "static" / "console.html"

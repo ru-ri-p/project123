@@ -690,3 +690,42 @@ class AuthSetPasswordIn(BaseModel):
     # Required when the session was earned by password; a code-earned session
     # (invitation/reset — inbox custody already proven) sets one without it.
     current_password: str | None = Field(default=None, max_length=128)
+
+
+# --- work queue -------------------------------------------------------------
+
+
+class WorkQueueApprovalItem(BaseModel):
+    approval_id: str
+    trace_id: str
+    created_at: str
+    # The decision this approval gates, so the officer sees what they are
+    # deciding. None only for approvals whose trace predates decision indexing.
+    action: str | None = None
+    tier: str | None = None
+    decision_status: str | None = None
+
+
+class WorkQueueFlagItem(BaseModel):
+    trace_id: str
+    seq: int
+    action: str
+    tier: str
+    status: str | None = None
+    created_at: str
+    remediation: dict[str, Any] | None = None
+    findings_count: int = 0
+
+
+class WorkQueueCounts(BaseModel):
+    approvals: int
+    open_flags: int
+    rewrite_confirmations: int
+    total: int
+
+
+class WorkQueueOut(BaseModel):
+    pending_approvals: list[WorkQueueApprovalItem]
+    open_flags: list[WorkQueueFlagItem]
+    rewrite_confirmations: list[WorkQueueFlagItem]
+    counts: WorkQueueCounts
