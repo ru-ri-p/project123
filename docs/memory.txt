@@ -960,3 +960,27 @@ repo stuck at ced9f0f until then; expired token diagnosed from Action logs).
   no-fallback). Suite: 260 passed.
 NEXT in auth track: login page UI (app/static/login.html) + console session
 awareness; then email provider when domain exists.
+
+--- 2026-09-01 (cont.) — login page + console session-awareness (task #13) ---
+- app/static/login.html served at /login: password sign-in; "first time /
+  forgot" -> one-time code -> choose password. Dev mode autofills the echoed
+  dev_code and says so. No-enumeration copy ("If that address has an
+  account..."). Already-signed-in visitors bounce straight to /console.
+- get_authenticated_org (deps.py) is now SESSION-AWARE: x-api-key when
+  present (a bad key fails loudly, never falls back to the cookie); else
+  bearer/cookie session -> the user's own org; viewer sessions are read-only
+  (403 on non-GET). Every console endpoint gained session support with zero
+  per-route edits. Side effect: keyless requests are now 401 (was 422 from
+  the required-header schema) — test_gate expectation updated.
+- console.html: api.call sends credentials + only sets x-api-key when set;
+  bootSession() checks /v1/auth/me first (person outranks machine key,
+  identities never mixed), renders user badge (name, email · role) +
+  Sign out (POST /v1/auth/logout -> /login); key path unchanged as fallback
+  with a "Sign in with email instead" link.
+- tests/test_console_session.py: 6 (login page served, cookie-only org read,
+  viewer read-only, officer write OK, signout kills server-side, bad key no
+  cookie fallback). Playwright browser smoke (scratchpad/login_smoke.py)
+  drove the REAL flow end-to-end: code -> set password -> console badge ->
+  sign out -> password sign-in; screenshots sent to founder. Suite: 266.
+Auth track now complete through UI. Remaining: email provider (domain),
+MFA/SSO later. Mirror STILL RED awaiting MIRROR_TOKEN secret update.

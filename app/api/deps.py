@@ -5,7 +5,7 @@ from __future__ import annotations
 import secrets
 from dataclasses import dataclass
 
-from fastapi import Cookie, Depends, Header, HTTPException
+from fastapi import Cookie, Depends, Header, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.auth import resolve_org
@@ -15,13 +15,43 @@ from app.db.session import get_db
 
 
 def get_authenticated_org(
-    x_api_key: str = Header(..., alias="x-api-key"),
+    request: Request,
+    x_api_key: str | None = Header(default=None, alias="x-api-key"),
+    authorization: str | None = Header(default=None),
+    attest_session: str | None = Cookie(default=None),
     db: Session = Depends(get_db),
 ) -> Org:
-    org = resolve_org(db, x_api_key)
-    if org is None:
-        raise HTTPException(status_code=401, detail="invalid api key")
-    return org
+    """Org auth for data endpoints: the org API key, or a signed-in person.
+
+    A key, when present, must be valid — a bad key never silently falls back
+    to the cookie (the caller thinks they authenticated one way; failing the
+    other way hides real misconfiguration). A session authenticates the
+    user's own org; viewers get read-only (403 on writes) — finer per-route
+    role gating belongs to the routes that need it (see approvals)."""
+    if x_api_key:
+        org = resolve_org(db, x_api_key)
+        if org is None:
+            raise HTTPException(status_code=401, detail="invalid api key")
+        return org
+
+    from app.services import human_auth
+
+    token = ""
+    if authorization and authorization.lower().startswith("bearer "):
+        token = authorization[7:].strip()
+    elif attest_session:
+        token = attest_session
+    if token:
+        user = human_auth.session_user(db, token)
+        if user is not None:
+            if user.role == "viewer" and request.method not in ("GET", "HEAD"):
+                raise HTTPException(status_code=403, detail="viewer role is read-only")
+            org = db.query(Org).filter(Org.id == user.org_id).one_or_none()
+            if org is not None:
+                return org
+        raise HTTPException(status_code=401, detail="session invalid or expired")
+
+    raise HTTPException(status_code=401, detail="not authenticated")
 
 
 @dataclass(frozen=True)

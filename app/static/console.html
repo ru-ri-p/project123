@@ -123,11 +123,16 @@
     <nav class="screens" id="nav"></nav>
     <div class="session">
       <div class="eyebrow" style="letter-spacing:2.5px;">SESSION</div>
+      <div class="orgbadge" id="userbadge" style="margin-bottom:8px;"></div>
       <div class="orgbadge" id="orgbadge"></div>
       <div class="keyform" id="keyform">
         <input type="password" id="apikey" placeholder="API key" autocomplete="off">
         <button class="btn primary" id="btn-connect" style="width:100%;">Connect</button>
+        <div class="kv2" style="margin-top:8px;">
+          <a href="/login" style="color:var(--blue);text-decoration:none;">Sign in with email instead</a>
+        </div>
       </div>
+      <button class="btn" id="btn-signout" style="width:100%;display:none;margin-top:8px;">Sign out</button>
       <div class="kv2" id="connstate">Not connected.</div>
     </div>
   </div>
@@ -449,9 +454,13 @@ function toast(msg, kind) {
 const api = {
   key: localStorage.getItem("attest_api_key") || "",
   async call(path, opts = {}) {
-    const headers = { "x-api-key": api.key };
+    // Two ways in: a signed-in person (session cookie rides along) or the org
+    // API key. When a person is signed in the key header is simply absent.
+    const headers = {};
+    if (api.key) headers["x-api-key"] = api.key;
     if (opts.body !== undefined) headers["content-type"] = "application/json";
     const res = await fetch(path, { method: opts.method || "GET", headers,
+      credentials: "same-origin",
       body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined });
     if (!res.ok) {
       let msg = res.status + "";
@@ -501,26 +510,49 @@ $("#ov-gotocompliance").addEventListener("click", () => go("compliance"));
 $("#ov-pendingstrip").addEventListener("click", () => go("requests"));
 
 /* ---------- connect + overview ---------- */
+function showConnected(ov, who) {
+  $("#orgbadge").style.display = "block";
+  $("#orgbadge").innerHTML = `<b>${esc(ov.name)}</b><br><span class="mono" style="font-size:11px;color:var(--faint);">${esc(ov.org_id)}</span>`;
+  $("#connstate").textContent = "Connected.";
+  $("#keyform").style.display = "none";
+  renderOverview(ov); loadRequests(); loadTraces(); renderCustody(ov); loadCompliance(); loadSettings(); maybeOnboard();
+  toast("Connected as " + (who || ov.name), "ok");
+}
 async function connect() {
   api.key = $("#apikey").value.trim();
   if (!api.key) return;
   try {
     const ov = await api.call("/v1/org/overview");
     localStorage.setItem("attest_api_key", api.key);
-    $("#orgbadge").style.display = "block";
-    $("#orgbadge").innerHTML = `<b>${esc(ov.name)}</b><br><span class="mono" style="font-size:11px;color:var(--faint);">${esc(ov.org_id)}</span>`;
-    $("#connstate").textContent = "Connected.";
-    $("#keyform").style.display = "none";
-    renderOverview(ov); loadRequests(); loadTraces(); renderCustody(ov); loadCompliance(); loadSettings(); maybeOnboard();
-    toast("Connected as " + ov.name, "ok");
+    showConnected(ov);
   } catch (e) {
     $("#connstate").textContent = "Connection failed.";
     toast("Connect failed: " + e.message, "err");
   }
 }
+async function bootSession() {
+  // A signed-in person outranks the machine key: their identity, their role.
+  try {
+    const me = await fetch("/v1/auth/me", { credentials: "same-origin" });
+    if (!me.ok) return false;
+    const user = await me.json();
+    api.key = "";  // never mix identities: session requests carry no key
+    $("#userbadge").style.display = "block";
+    $("#userbadge").innerHTML = `<b>${esc(user.display_name)}</b><br>` +
+      `<span class="mono" style="font-size:11px;color:var(--faint);">${esc(user.email)} · ${esc(user.role)}</span>`;
+    $("#btn-signout").style.display = "block";
+    const ov = await api.call("/v1/org/overview");
+    showConnected(ov, user.display_name);
+    return true;
+  } catch (e) { return false; }
+}
+$("#btn-signout").addEventListener("click", async () => {
+  try { await fetch("/v1/auth/logout", { method: "POST", credentials: "same-origin" }); } catch (e) {}
+  location.href = "/login";
+});
 $("#btn-connect").addEventListener("click", connect);
 $("#apikey").value = api.key;
-if (api.key) connect();
+bootSession().then((signedIn) => { if (!signedIn && api.key) connect(); });
 
 function renderOverview(ov) {
   $("#ov-title").textContent = "Overview";

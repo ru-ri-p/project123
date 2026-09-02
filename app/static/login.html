@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sign in — Attest</title>
+<style>
+  :root {
+    --bg:#f2f4f6; --card:#ffffff; --line:#dfe3e9; --line2:#e8ebef;
+    --ink:#16202e; --body:#3d4757; --mut:#5a6779; --faint:#7a8494;
+    --blue:#1568d4; --blue2:#2e7de5; --blueB:#b9d5f5;
+    --red:#b03a2e; --redBg:rgba(176,58,46,.08);
+    --green:#20713a; --greenBg:rgba(32,113,58,.08);
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+         font:14px/1.55 'IBM Plex Sans',-apple-system,'Segoe UI',sans-serif;
+         min-height:100vh; display:flex; align-items:center; justify-content:center; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px;
+          width:min(400px, calc(100vw - 32px)); padding:34px 34px 28px;
+          box-shadow:0 1px 2px rgba(22,32,46,.05); }
+  .word { font-family:Georgia,'Fraunces',serif; font-weight:600; font-size:24px; letter-spacing:.5px; }
+  .tag { font-family:Georgia,serif; font-size:10.5px; letter-spacing:3px; color:var(--mut); margin:2px 0 26px; }
+  h1 { font-size:17px; font-weight:600; margin:0 0 4px; }
+  .sub { color:var(--mut); font-size:12.5px; margin:0 0 20px; }
+  label { display:block; font-size:11.5px; font-weight:600; color:var(--mut);
+          letter-spacing:.4px; margin:14px 0 5px; text-transform:uppercase; }
+  input { width:100%; padding:9px 11px; font:inherit; color:var(--ink);
+          border:1px solid var(--line); border-radius:6px; background:#fff; }
+  input:focus { outline:none; border-color:var(--blueB); box-shadow:0 0 0 3px rgba(46,125,229,.12); }
+  button.primary { width:100%; margin-top:20px; padding:10px; font:inherit; font-weight:600;
+          color:#fff; background:var(--blue); border:none; border-radius:6px; cursor:pointer; }
+  button.primary:hover { background:var(--blue2); }
+  button.primary:disabled { opacity:.6; cursor:default; }
+  .alt { margin-top:16px; text-align:center; font-size:12.5px; }
+  .alt a { color:var(--blue); cursor:pointer; text-decoration:none; }
+  .alt a:hover { text-decoration:underline; }
+  .msg { display:none; margin-top:16px; padding:10px 12px; border-radius:6px; font-size:12.5px; }
+  .msg.err { display:block; background:var(--redBg); color:var(--red); }
+  .msg.ok  { display:block; background:var(--greenBg); color:var(--green); }
+  .step { display:none; }
+  .step.on { display:block; }
+  .hint { font-size:11.5px; color:var(--faint); margin-top:6px; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="word">Attest</div>
+  <div class="tag">AI AUDIT &amp; COMPLIANCE</div>
+
+  <!-- Step: password sign-in (default) -->
+  <div class="step on" id="step-password">
+    <h1>Sign in</h1>
+    <p class="sub">Use your work email and password.</p>
+    <form id="f-password">
+      <label for="pw-email">Email</label>
+      <input id="pw-email" type="email" autocomplete="username" required>
+      <label for="pw-pass">Password</label>
+      <input id="pw-pass" type="password" autocomplete="current-password" required>
+      <button class="primary" type="submit">Sign in</button>
+    </form>
+    <div class="alt"><a data-go="step-code">First time here, or forgot your password?</a></div>
+  </div>
+
+  <!-- Step: request a one-time code -->
+  <div class="step" id="step-code">
+    <h1>Sign in with a code</h1>
+    <p class="sub">We email a one-time code to your registered address —
+       for your first sign-in, or to reset a forgotten password.</p>
+    <form id="f-code">
+      <label for="code-email">Email</label>
+      <input id="code-email" type="email" autocomplete="username" required>
+      <button class="primary" type="submit">Email me a code</button>
+    </form>
+    <div class="alt"><a data-go="step-password">Back to password sign-in</a></div>
+  </div>
+
+  <!-- Step: enter the code -->
+  <div class="step" id="step-verify">
+    <h1>Enter your code</h1>
+    <p class="sub">Six digits, valid for ten minutes. Check your inbox.</p>
+    <form id="f-verify">
+      <label for="verify-code">Code</label>
+      <input id="verify-code" inputmode="numeric" pattern="\d{6}" maxlength="6"
+             autocomplete="one-time-code" required>
+      <button class="primary" type="submit">Verify</button>
+    </form>
+    <div class="alt"><a data-go="step-code">Send a new code</a></div>
+  </div>
+
+  <!-- Step: choose a password (after a code sign-in) -->
+  <div class="step" id="step-setpw">
+    <h1>Choose a password</h1>
+    <p class="sub">At least 12 characters. A short sentence you'll remember
+       beats a complicated scramble.</p>
+    <form id="f-setpw">
+      <label for="new-pass">New password</label>
+      <input id="new-pass" type="password" autocomplete="new-password"
+             minlength="12" maxlength="128" required>
+      <button class="primary" type="submit">Set password &amp; continue</button>
+    </form>
+    <div class="alt"><a id="skip-setpw">Skip for now — go to the console</a></div>
+  </div>
+
+  <div class="msg" id="msg"></div>
+</div>
+
+<script>
+"use strict";
+const $ = (s) => document.querySelector(s);
+let email = "";
+
+function show(step) {
+  document.querySelectorAll(".step").forEach((el) => el.classList.toggle("on", el.id === step));
+  msg("");
+}
+function msg(text, kind) {
+  const el = $("#msg");
+  el.textContent = text || "";
+  el.className = text ? "msg " + (kind || "err") : "msg";
+}
+document.querySelectorAll("[data-go]").forEach((a) =>
+  a.addEventListener("click", () => show(a.dataset.go)));
+
+async function post(path, body) {
+  const res = await fetch(path, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    credentials: "same-origin",   // the session cookie is the login
+    body: JSON.stringify(body),
+  });
+  let data = {};
+  try { data = await res.json(); } catch (e) {}
+  if (!res.ok) {
+    const detail = typeof data.detail === "string" ? data.detail
+      : (data.detail && JSON.stringify(data.detail)) || ("error " + res.status);
+    const err = new Error(detail); err.status = res.status; throw err;
+  }
+  return data;
+}
+
+function busy(form, on) {
+  form.querySelector("button").disabled = on;
+}
+
+$("#f-password").addEventListener("submit", async (e) => {
+  e.preventDefault(); busy(e.target, true);
+  try {
+    email = $("#pw-email").value.trim();
+    await post("/v1/auth/login", { email, password: $("#pw-pass").value });
+    location.href = "/console";
+  } catch (err) {
+    msg(err.status === 401
+      ? "That email and password combination was not accepted."
+      : err.message);
+  } finally { busy(e.target, false); }
+});
+
+$("#f-code").addEventListener("submit", async (e) => {
+  e.preventDefault(); busy(e.target, true);
+  try {
+    email = $("#code-email").value.trim();
+    const r = await post("/v1/auth/request-code", { email });
+    show("step-verify");
+    if (r.dev_code) {           // development only: the server echoed the code
+      $("#verify-code").value = r.dev_code;
+      msg("Development mode: code filled in for you.", "ok");
+    } else {
+      msg("If that address has an account, a code is on its way.", "ok");
+    }
+  } catch (err) {
+    msg(err.status === 503
+      ? "Code sign-in is not available yet — contact your Attest administrator."
+      : err.message);
+  } finally { busy(e.target, false); }
+});
+
+$("#f-verify").addEventListener("submit", async (e) => {
+  e.preventDefault(); busy(e.target, true);
+  try {
+    await post("/v1/auth/verify", { email, code: $("#verify-code").value.trim() });
+    show("step-setpw");
+    msg("Signed in. Set a password for next time.", "ok");
+  } catch (err) {
+    msg("That code was not accepted. It may have expired — request a new one.");
+  } finally { busy(e.target, false); }
+});
+
+$("#f-setpw").addEventListener("submit", async (e) => {
+  e.preventDefault(); busy(e.target, true);
+  try {
+    await post("/v1/auth/set-password", { new_password: $("#new-pass").value });
+    location.href = "/console";
+  } catch (err) {
+    msg(err.message);
+  } finally { busy(e.target, false); }
+});
+
+$("#skip-setpw").addEventListener("click", () => { location.href = "/console"; });
+
+// Already signed in? Straight through.
+fetch("/v1/auth/me", { credentials: "same-origin" })
+  .then((r) => { if (r.ok) location.href = "/console"; })
+  .catch(() => {});
+</script>
+</body>
+</html>

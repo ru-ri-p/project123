@@ -175,7 +175,9 @@ def test_bad_input_is_rejected_cleanly(client) -> None:
                        json={"action": "", "output": {}}).status_code == 422
     assert client.post("/v1/gate", headers={"x-api-key": key}, json={
         "action": "x", "output": {}, "trace_id": "not-a-uuid"}).status_code == 422
-    assert client.post("/v1/gate", json={"action": "x", "output": {}}).status_code == 422
+    # No credentials at all: 401 (was 422 when the header was schema-required;
+    # since sessions became an alternative, a missing key is an AUTH failure).
+    assert client.post("/v1/gate", json={"action": "x", "output": {}}).status_code == 401
 
 
 def test_another_orgs_trace_is_refused(client) -> None:

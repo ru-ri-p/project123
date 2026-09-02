@@ -52,6 +52,15 @@ app.include_router(humans_router)
 
 _CONSOLE = Path(__file__).parent / "static" / "console.html"
 _ADMIN = Path(__file__).parent / "static" / "admin.html"
+_LOGIN = Path(__file__).parent / "static" / "login.html"
+
+
+@app.get("/login", include_in_schema=False)
+def login_page() -> FileResponse:
+    """Sign-in for dashboard humans (password, or one-time code for the first
+    sign-in / a reset). Static HTML; the session cookie set by /v1/auth is the
+    only state."""
+    return FileResponse(_LOGIN, media_type="text/html")
 
 
 @app.get("/admin", include_in_schema=False)
