@@ -1013,3 +1013,13 @@ MFA/SSO later. Mirror STILL RED awaiting MIRROR_TOKEN secret update.
 Demo orgs on LOCAL db: org_queue_demo (key rotated in session, in shell
 history only), org_login_demo. Officer y.almansoori@example.test / amina.k@
 example.test (password "a sensible long password" — local dev only).
+
+--- 2026-09-03 — MIRROR GREEN AGAIN ---
+Token saga resolved: expired token -> renewed but Contents read-only (403
+"denied to ru-ri-p") -> permission flipped to read-write -> run #46 SUCCESS
+(cd313c6 mirrored). Deploy repo ru-ri-p/project123 now carries everything:
+SDK 0.2.0 + cured-output fix, full auth stack, /login, session console,
+officer work queue. Founder's next move: Render sitting (deploy latest +
+ANTHROPIC_API_KEY + dress rehearsal + create real admin user + send
+TradeEasy package). Reminder set in DEPLOY_MIRROR doc lore: fine-grained
+tokens default to Contents read-only; check the dropdown.
