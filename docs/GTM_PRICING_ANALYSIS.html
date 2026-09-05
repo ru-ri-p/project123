@@ -1,0 +1,335 @@
+<title>Attest Go-to-Market &amp; Pricing</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root {
+    --bg:#eef0f3; --card:#ffffff; --sunk:#f5f6f9; --deep:#111a24;
+    --line:#dce0e7; --line2:#e7eaef;
+    --ink:#141d2a; --body:#3a4453; --mut:#5a6779; --faint:#8a94a2;
+    --blue:#1568d4; --blueSoft:rgba(21,104,212,.09); --blueLine:#b9d5f5;
+    --gold:#9a6a1e; --goldSoft:rgba(154,106,30,.10); --goldLine:#cba25e;
+    --green:#20713a; --red:#b03a2e;
+    --shadow:0 1px 2px rgba(20,29,42,.05), 0 10px 30px -20px rgba(20,29,42,.35);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg:#0d131b; --card:#151e28; --sunk:#101822; --deep:#080d13;
+      --line:#263140; --line2:#1e2731;
+      --ink:#eef2f6; --body:#c2ccd8; --mut:#93a0b0; --faint:#6b7888;
+      --blue:#63a4f0; --blueSoft:rgba(99,164,240,.12); --blueLine:#2f4d6e;
+      --gold:#cfa860; --goldSoft:rgba(207,168,96,.13); --goldLine:#5c4a24;
+      --green:#5fbf80; --red:#e0897d;
+      --shadow:0 1px 2px rgba(0,0,0,.35), 0 12px 34px -22px rgba(0,0,0,.7);
+    }
+  }
+  :root[data-theme="dark"] {
+      --bg:#0d131b; --card:#151e28; --sunk:#101822; --deep:#080d13;
+      --line:#263140; --line2:#1e2731;
+      --ink:#eef2f6; --body:#c2ccd8; --mut:#93a0b0; --faint:#6b7888;
+      --blue:#63a4f0; --blueSoft:rgba(99,164,240,.12); --blueLine:#2f4d6e;
+      --gold:#cfa860; --goldSoft:rgba(207,168,96,.13); --goldLine:#5c4a24;
+      --green:#5fbf80; --red:#e0897d;
+      --shadow:0 1px 2px rgba(0,0,0,.35), 0 12px 34px -22px rgba(0,0,0,.7);
+  }
+  * { box-sizing:border-box; }
+  html { scroll-behavior:smooth; }
+  body { margin:0; background:var(--bg); color:var(--body);
+         font:16px/1.62 'IBM Plex Sans',-apple-system,'Segoe UI',sans-serif; -webkit-font-smoothing:antialiased; }
+  .mono { font-family:'IBM Plex Mono',ui-monospace,monospace; }
+  .wrap { max-width:860px; margin:0 auto; padding:0 24px 100px; }
+  header.top { max-width:860px; margin:0 auto; padding:56px 24px 30px; }
+  .doc-eyebrow { font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:2.5px;
+                 text-transform:uppercase; color:var(--gold); margin:0 0 16px; }
+  .brand { font-family:'Fraunces',Georgia,serif; font-weight:600; font-size:19px; color:var(--ink); }
+  h1 { font-family:'Fraunces',Georgia,serif; font-weight:500; color:var(--ink);
+       font-size:clamp(31px,5vw,46px); line-height:1.08; letter-spacing:-.5px; text-wrap:balance; margin:14px 0 16px; }
+  .lede { font-size:18.5px; line-height:1.55; color:var(--mut); max-width:64ch; margin:0; }
+  .meta { display:flex; flex-wrap:wrap; gap:8px 22px; font-size:12.5px; color:var(--faint);
+          margin-top:22px; padding-top:18px; border-top:1px solid var(--line); }
+  .meta b { color:var(--body); font-weight:500; }
+
+  section { margin-top:52px; }
+  .eyebrow { font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:2.5px;
+             text-transform:uppercase; color:var(--blue); margin:0 0 10px; }
+  h2 { font-family:'Fraunces',Georgia,serif; font-weight:500; color:var(--ink); font-size:28px;
+       line-height:1.18; letter-spacing:-.2px; text-wrap:balance; margin:0 0 14px; }
+  h3 { font-size:16.5px; font-weight:600; color:var(--ink); margin:24px 0 8px; }
+  p { margin:0 0 14px; max-width:66ch; }
+  strong { color:var(--ink); font-weight:600; } a { color:var(--blue); }
+  ul { max-width:66ch; padding-left:20px; } li { margin:6px 0; }
+
+  .stats { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin:22px 0 4px; }
+  @media (max-width:640px){ .stats { grid-template-columns:1fr; } }
+  .stat { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:20px 22px; box-shadow:var(--shadow); }
+  .stat .fig { font-family:'Fraunces',serif; font-weight:600; font-size:30px; color:var(--ink); line-height:1; }
+  .stat .lab { font-size:13px; color:var(--mut); margin-top:8px; line-height:1.45; }
+
+  .persona { display:grid; grid-template-columns:repeat(2,1fr); gap:14px; margin-top:22px; }
+  @media (max-width:640px){ .persona { grid-template-columns:1fr; } }
+  .pc { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:20px 22px; }
+  .pc h4 { margin:0 0 3px; font-size:15.5px; color:var(--ink); font-weight:600; }
+  .pc .role { font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:1px;
+              text-transform:uppercase; color:var(--gold); margin-bottom:10px; }
+  .pc p { font-size:13.5px; color:var(--mut); margin:0; }
+
+  table { width:100%; border-collapse:collapse; margin:18px 0; font-size:13.5px; display:block; overflow-x:auto; }
+  th, td { text-align:left; padding:11px 13px; border-bottom:1px solid var(--line2); vertical-align:top; }
+  th { font-size:10.5px; letter-spacing:1px; text-transform:uppercase; color:var(--faint); font-weight:600;
+       position:sticky; top:0; background:var(--bg); }
+  td strong { color:var(--ink); }
+  tbody tr:last-child td { border-bottom:none; }
+  .num { font-variant-numeric:tabular-nums; white-space:nowrap; }
+
+  /* pricing tiers */
+  .tiers { display:grid; grid-template-columns:repeat(2,1fr); gap:16px; margin-top:24px; }
+  @media (max-width:720px){ .tiers { grid-template-columns:1fr; } }
+  .tier { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:24px 26px; box-shadow:var(--shadow); }
+  .tier.flag { border-color:var(--goldLine); }
+  .tier .seg { font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:1.5px;
+               text-transform:uppercase; color:var(--gold); }
+  .tier h3 { margin:6px 0 2px; font-family:'Fraunces',serif; font-size:21px; font-weight:600; color:var(--ink); }
+  .tier .price { font-family:'Fraunces',serif; font-size:23px; color:var(--ink); margin:14px 0 2px; font-weight:600; }
+  .tier .price span { font-size:13px; color:var(--mut); font-weight:400; font-family:'IBM Plex Sans',sans-serif; }
+  .tier .metric { font-size:12.5px; color:var(--mut); margin-bottom:14px; }
+  .tier ul { padding-left:18px; margin:0; } .tier li { font-size:13.5px; color:var(--body); }
+
+  .callout { border:1px solid var(--goldLine); background:var(--goldSoft); border-radius:10px;
+             padding:15px 18px; margin:18px 0; font-size:14px; }
+  .callout b { color:var(--ink); }
+  .note { border-left:3px solid var(--blue); background:var(--sunk); border-radius:0 8px 8px 0;
+          padding:12px 16px; margin:16px 0; font-size:14px; }
+  footer { max-width:860px; margin:56px auto 0; padding:24px 24px 0; border-top:1px solid var(--line);
+           font-size:12.5px; color:var(--faint); line-height:1.55; }
+</style>
+
+<header class="top">
+  <p class="doc-eyebrow">Strategy memo · prepared as a business analyst</p>
+  <div class="brand">Attest</div>
+  <h1>Who buys Attest, why, and what to charge them</h1>
+  <p class="lede">An ideal-customer profile, the value case that moves each buyer, and a
+    segment-by-segment pricing model with the reasoning behind every number. Figures are a
+    defensible <em>proposed</em> model with ranges to validate in pilots — not observed market
+    prices.</p>
+  <div class="meta">
+    <span><b>Market</b> UAE regulated finance &amp; gov</span>
+    <span><b>Stage</b> Pilot → first paid</span>
+    <span><b>Currency</b> USD (AED at ~3.67)</span>
+    <span><b>Confidence</b> Model, validate in-market</span>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <section id="thesis">
+    <div class="callout"><b>The one-line market thesis.</b> AI is entering regulated financial
+      workflows faster than the ability to <em>prove</em> what it did. In the DIFC and ADGM, where
+      record-keeping and data protection are licence conditions, that gap is a live compliance
+      exposure — and the firms feeling it first are the ones putting AI in front of clients today.
+      Attest sells the proof, not the AI.</p>
+  </section>
+
+  <section id="icp">
+    <p class="eyebrow">01 · Ideal customer</p>
+    <h2>Who this is for</h2>
+    <p>The sharpest fit is an organisation that (a) uses AI in a workflow a regulator cares about,
+      (b) operates under a record-keeping or data-protection regime, and (c) has someone whose job
+      is personally on the line if an AI decision can't be accounted for. Three concentric rings:</p>
+
+    <div class="stats">
+      <div class="stat"><div class="fig">Ring 1</div><div class="lab"><strong>Regulated fintech &amp;
+        market-intelligence</strong> in the DIFC/ADGM putting AI outputs in front of clients —
+        the beachhead. Fast-moving, feel the pain now, short sales cycle. <em>(e.g. the pilot
+        customer.)</em></div></div>
+      <div class="stat"><div class="fig">Ring 2</div><div class="lab"><strong>Banks, wealth &amp;
+        asset managers</strong> with AI innovation programmes and formal compliance functions.
+        Larger contracts, longer cycles, procurement and security review.</div></div>
+      <div class="stat"><div class="fig">Ring 3</div><div class="lab"><strong>Government &amp; public
+        bodies</strong> adopting AI who need a defensible, independently-verifiable trail of every
+        automated decision. Slowest, largest, most durable.</div></div>
+    </div>
+
+    <h3>Qualifying signals (fits) and anti-signals (skip)</h3>
+    <ul>
+      <li><strong>Fits:</strong> AI touches client-facing or decision-making output; a named CCO,
+        MLRO or Head of Compliance; a DIFC/ADGM licence; a public AI launch in the last year; a
+        board that has asked "how do we govern this?"</li>
+      <li><strong>Skip for now:</strong> pure back-office AI with no external exposure; no
+        compliance function; unregulated; wants Attest to <em>decide legality</em> (Attest proves
+        records, it does not certify lawfulness).</li>
+    </ul>
+  </section>
+
+  <section id="buyers">
+    <p class="eyebrow">02 · The people</p>
+    <h2>Who signs, who champions, who blocks</h2>
+    <div class="persona">
+      <div class="pc"><div class="role">Economic buyer</div><h4>Chief Compliance Officer / MLRO</h4>
+        <p>Owns the regulatory risk. Buys because an unprovable AI record is <em>their</em> exposure
+          at the next audit. Speaks "record-keeping obligation," not "hash chain."</p></div>
+      <div class="pc"><div class="role">Champion</div><h4>Head of AI / Innovation / Product</h4>
+        <p>Wants to ship AI features without compliance saying no. Attest is the thing that lets the
+          launch happen. Often finds you first.</p></div>
+      <div class="pc"><div class="role">Technical gate</div><h4>CISO / Head of Security</h4>
+        <p>Runs the security review. Won over by customer-key mode, the minimal dependency surface,
+          external anchoring, and SECURITY.md. Can veto.</p></div>
+      <div class="pc"><div class="role">Approver</div><h4>General Counsel / Risk Committee</h4>
+        <p>Signs off on the "provable to a regulator" claim and the pilot terms. Cares that Attest
+          is honest about what it does and doesn't certify.</p></div>
+    </div>
+  </section>
+
+  <section id="value">
+    <p class="eyebrow">03 · The value</p>
+    <h2>What they're actually buying</h2>
+    <p>Not a log — an <strong>insurance-grade, independently-verifiable record</strong> that
+      converts an unbounded, hard-to-quantify regulatory risk into a bounded, demonstrable control.
+      Four value lines, roughly in the order buyers feel them:</p>
+    <table>
+      <thead><tr><th>Value</th><th>What it replaces</th><th>Why it's worth paying for</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Regulatory risk reduction</strong></td><td>An editable log a regulator can't rely on</td><td>Enforcement, fines and licence risk in the DIFC/ADGM are existential for a small firm; a provable trail is cheap against that tail.</td></tr>
+        <tr><td><strong>Faster, safer AI launch</strong></td><td>Compliance blocking the roadmap</td><td>Governance that unblocks a launch has direct revenue value — the champion's real motivation.</td></tr>
+        <tr><td><strong>Lower audit &amp; evidence cost</strong></td><td>Manual evidence-gathering under deadline</td><td>One-click, self-verifying evidence bundles turn days of scramble into minutes.</td></tr>
+        <tr><td><strong>Trust as sales enablement</strong></td><td>"Trust us" to their own clients</td><td>The customer can now prove <em>their</em> AI is governed — a differentiator they resell.</td></tr>
+      </tbody>
+    </table>
+    <div class="note"><strong>The framing that lands:</strong> "We flagged it, here's the fix,
+      here's proof the fix shipped, and nobody can doctor that history." Attest is a speed camera,
+      not the speed limit — it proves records are unaltered; it does not certify lawfulness. Being
+      honest about that boundary is itself part of the sale to counsel.</div>
+  </section>
+
+  <section id="competition">
+    <p class="eyebrow">04 · Why not the alternatives</p>
+    <h2>The wedge</h2>
+    <table>
+      <thead><tr><th>Alternative</th><th>Where it falls short</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Build it in-house / app logs</strong></td><td>A log the firm can edit proves nothing to a regulator. No external anchor, no offline verifier, and it's now a system they must maintain and defend.</td></tr>
+        <tr><td><strong>Generic AI-governance / eval tools</strong></td><td>Measure model quality and bias; they don't produce a tamper-evident, externally-anchored, independently-verifiable record of each action.</td></tr>
+        <tr><td><strong>GRC / audit platforms</strong></td><td>Track policies and controls at the org level, not a signed, per-action chain of what the AI actually did.</td></tr>
+        <tr><td><strong>Cloud audit trails</strong></td><td>Trust the same vendor that stores them; Attest anchors externally so <em>not even Attest</em> can rewrite history, and customer-key keeps content dark to the vendor.</td></tr>
+      </tbody>
+    </table>
+    <p>Three things are hard to copy and worth leading with: <strong>external anchoring</strong>
+      (defends against insiders on both sides, including us), <strong>customer-key confidentiality</strong>
+      (content dark to the vendor), and <strong>offline-verifiable evidence</strong> (a regulator
+      checks it with no access to your systems).</p>
+  </section>
+
+  <section id="pricing">
+    <p class="eyebrow">05 · Pricing model</p>
+    <h2>How to charge, by segment</h2>
+    <p>The recommended structure is a <strong>platform fee + usage</strong> hybrid. The platform fee
+      captures the value of the compliance surface (policy engine, console, evidence, roles); usage
+      — priced per <strong>gated action</strong> — aligns cost with the value delivered and scales
+      naturally as the customer puts more AI through Attest. Per-gated-action is the right metric:
+      it's the unit of value (one provable AI decision), it's transparent, and it grows with the
+      account without punishing early adoption.</p>
+
+    <div class="tiers">
+      <div class="tier flag">
+        <div class="seg">Ring 1 · beachhead</div>
+        <h3>Growth</h3>
+        <div class="price">$1.5–4k<span> / month</span></div>
+        <div class="metric">+ usage above an included volume (~100–250k gated actions/mo)</div>
+        <ul>
+          <li>Regulated fintech &amp; market-intelligence SMEs</li>
+          <li>Self-serve console, SDK, standard packs</li>
+          <li>Usage ~$0.002–0.01 / gated action, tiered down by volume</li>
+          <li>Lands fast; expands with their AI usage</li>
+        </ul>
+      </div>
+      <div class="tier">
+        <div class="seg">Ring 2 · enterprise</div>
+        <h3>Institution</h3>
+        <div class="price">$30–120k<span> / year</span></div>
+        <div class="metric">platform + seats + committed volume, annual</div>
+        <ul>
+          <li>Banks, wealth &amp; asset managers</li>
+          <li>Named seats for compliance officers, SSO, priority support/SLA</li>
+          <li>Customer-key &amp; region/on-prem as priced add-ons</li>
+          <li>Procurement-friendly annual commit</li>
+        </ul>
+      </div>
+      <div class="tier">
+        <div class="seg">Ring 3 · public sector</div>
+        <h3>Public</h3>
+        <div class="price">Custom<span> annual licence</span></div>
+        <div class="metric">tender-shaped; deployment premium</div>
+        <ul>
+          <li>Government &amp; public bodies</li>
+          <li>Region-locked or on-prem deployment (premium)</li>
+          <li>Fixed annual licence over per-action metering</li>
+          <li>Longest cycle, most durable revenue</li>
+        </ul>
+      </div>
+      <div class="tier">
+        <div class="seg">Embed</div>
+        <h3>OEM / Powered-by</h3>
+        <div class="price">Rev-share<span> or wholesale usage</span></div>
+        <div class="metric">per-action wholesale + platform minimum</div>
+        <ul>
+          <li>RegTech / AI vendors embedding Attest for their clients</li>
+          <li>Wholesale per-action rate, white-labelled evidence</li>
+          <li>Attest scales through their distribution</li>
+        </ul>
+      </div>
+    </div>
+
+    <h3>Add-ons (priced on top, any segment)</h3>
+    <table>
+      <thead><tr><th>Add-on</th><th>Indicative</th><th>Rationale</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Customer-key / BYOK</strong></td><td class="num">+15–25% platform</td><td>The feature that clears the toughest security reviews; high willingness-to-pay in Ring 2/3.</td></tr>
+        <tr><td><strong>Region-lock / on-prem</strong></td><td class="num">+$20–60k / yr</td><td>Answers the data-residency question directly; real infra + support cost behind it.</td></tr>
+        <tr><td><strong>Counsel-reviewed rule packs</strong></td><td class="num">$5–20k / pack / yr</td><td>Once packs are lawyer-verified, they become a premium content line vs today's advisory packs.</td></tr>
+        <tr><td><strong>Premium support / SLA</strong></td><td class="num">+15–20%</td><td>Uptime and response guarantees regulated buyers require.</td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout"><b>How to get to real numbers.</b> Treat the ranges above as hypotheses.
+      Validate with 3–5 pilot conversations: ask what an unprovable AI record would cost them at
+      audit, what they budget for compliance tooling, and what a launch delay costs. Price against
+      the risk avoided, not the compute consumed — the value is insurance, and insurance isn't
+      priced by the kilobyte.</div>
+  </section>
+
+  <section id="motion">
+    <p class="eyebrow">06 · The motion</p>
+    <h2>Land, expand, deepen</h2>
+    <ul>
+      <li><strong>Land</strong> — a scoped, paid or design-partner pilot on one AI workflow
+        (as with the current pilot). Prove the loop and the evidence bundle on synthetic data.</li>
+      <li><strong>Expand</strong> — more actions, more seats, more workflows under the same
+        platform fee as their AI usage grows.</li>
+      <li><strong>Deepen</strong> — customer-key, counsel-reviewed packs, region/on-prem, SLA:
+        the add-ons that raise both price and switching cost.</li>
+    </ul>
+    <p>Early on, prefer a small number of reference design-partners over revenue maximisation. A
+      named DIFC-regulated firm that will vouch for the evidence bundle is worth more than its
+      contract — it's the proof the next ten buyers need.</p>
+  </section>
+
+  <section id="risks">
+    <p class="eyebrow">07 · Honest caveats</p>
+    <h2>What could be wrong here</h2>
+    <ul>
+      <li><strong>Prices are a model, not a market read.</strong> No willingness-to-pay data yet;
+        validate before quoting.</li>
+      <li><strong>Packs are pre-counsel.</strong> The premium content line depends on legal review
+        that hasn't happened; today's packs are advisory and labelled as such.</li>
+      <li><strong>The buyer may be created, not found.</strong> Some targets don't yet know they
+        need provable AI records — that lengthens the cycle and raises the education cost.</li>
+      <li><strong>Concentration risk.</strong> A single-jurisdiction beachhead (UAE) is the right
+        focus, but plan the second market before over-indexing.</li>
+    </ul>
+  </section>
+
+  <footer>
+    Prepared as an internal strategy analysis for Attest. Pricing figures are a proposed model with
+    ranges to be validated in-market and are not observed prices or commitments. Attest proves AI
+    records are unaltered; it does not certify that an output is lawful.
+  </footer>
+</div>

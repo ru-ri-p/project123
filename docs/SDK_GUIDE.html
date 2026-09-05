@@ -1,0 +1,446 @@
+<title>Attest SDK Guide</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root {
+    --bg:#eef1f4; --card:#ffffff; --sunk:#f4f6f8; --deep:#101a26;
+    --line:#dbe0e7; --line2:#e7ebef;
+    --ink:#16202e; --body:#3a4453; --mut:#5a6779; --faint:#8b95a3;
+    --blue:#1568d4; --blueSoft:rgba(21,104,212,.09); --blueLine:#b9d5f5;
+    --green:#20713a; --greenSoft:rgba(32,113,58,.10);
+    --amber:#8a6410; --amberSoft:rgba(201,160,74,.16); --amberLine:#d8b25f;
+    --red:#b03a2e; --redSoft:rgba(176,58,46,.09); --redLine:#d29088;
+    --shadow:0 1px 2px rgba(22,32,46,.05), 0 8px 24px -18px rgba(22,32,46,.25);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg:#0e141c; --card:#161e28; --sunk:#0f161f; --deep:#080d14;
+      --line:#273240; --line2:#1f2833;
+      --ink:#eef2f6; --body:#c2ccd8; --mut:#93a0b0; --faint:#6b7888;
+      --blue:#63a4f0; --blueSoft:rgba(99,164,240,.12); --blueLine:#2f4d6e;
+      --green:#5fbf80; --greenSoft:rgba(95,191,128,.13);
+      --amber:#d7b264; --amberSoft:rgba(215,178,100,.14); --amberLine:#5c4a24;
+      --red:#e0897d; --redSoft:rgba(224,137,125,.12); --redLine:#5e332d;
+      --shadow:0 1px 2px rgba(0,0,0,.3), 0 10px 30px -20px rgba(0,0,0,.6);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg:#0e141c; --card:#161e28; --sunk:#0f161f; --deep:#080d14;
+    --line:#273240; --line2:#1f2833;
+    --ink:#eef2f6; --body:#c2ccd8; --mut:#93a0b0; --faint:#6b7888;
+    --blue:#63a4f0; --blueSoft:rgba(99,164,240,.12); --blueLine:#2f4d6e;
+    --green:#5fbf80; --greenSoft:rgba(95,191,128,.13);
+    --amber:#d7b264; --amberSoft:rgba(215,178,100,.14); --amberLine:#5c4a24;
+    --red:#e0897d; --redSoft:rgba(224,137,125,.12); --redLine:#5e332d;
+    --shadow:0 1px 2px rgba(0,0,0,.3), 0 10px 30px -20px rgba(0,0,0,.6);
+  }
+  * { box-sizing:border-box; }
+  html { scroll-behavior:smooth; }
+  body { margin:0; background:var(--bg); color:var(--body);
+         font:16px/1.62 'IBM Plex Sans',-apple-system,'Segoe UI',sans-serif; -webkit-font-smoothing:antialiased; }
+  .mono { font-family:'IBM Plex Mono',ui-monospace,monospace; }
+
+  .layout { max-width:1060px; margin:0 auto; padding:0 24px; display:grid;
+            grid-template-columns:210px 1fr; gap:40px; }
+  @media (max-width:820px){ .layout { grid-template-columns:1fr; gap:0; } }
+
+  aside { position:sticky; top:0; align-self:start; height:100vh; overflow-y:auto;
+          padding:40px 0 40px; }
+  @media (max-width:820px){ aside { position:static; height:auto; padding:24px 0 0; } }
+  aside .brand { font-family:'Fraunces',Georgia,serif; font-weight:600; font-size:21px; color:var(--ink); }
+  aside .btag { font-family:'Fraunces',serif; font-size:9.5px; letter-spacing:2.5px; color:var(--mut);
+                text-transform:uppercase; margin:2px 0 22px; }
+  aside nav { display:flex; flex-direction:column; gap:1px; }
+  aside nav a { font-size:13px; color:var(--mut); text-decoration:none; padding:6px 10px; border-radius:6px;
+                border-left:2px solid transparent; }
+  aside nav a:hover { color:var(--blue); background:var(--blueSoft); }
+  aside nav .grp { font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:1.5px;
+                   text-transform:uppercase; color:var(--faint); margin:16px 10px 4px; }
+
+  main { padding:44px 0 100px; min-width:0; }
+  .eyebrow { font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:2.5px;
+             text-transform:uppercase; color:var(--blue); margin:0 0 12px; }
+  h1 { font-family:'Fraunces',Georgia,serif; font-weight:500; color:var(--ink);
+       font-size:clamp(30px,5vw,44px); line-height:1.1; letter-spacing:-.5px; text-wrap:balance; margin:0 0 16px; }
+  .lede { font-size:18.5px; line-height:1.55; color:var(--mut); max-width:64ch; margin:0 0 8px; }
+  h2 { font-family:'Fraunces',Georgia,serif; font-weight:500; color:var(--ink); font-size:28px;
+       line-height:1.18; letter-spacing:-.2px; text-wrap:balance; margin:0 0 12px;
+       padding-top:14px; }
+  h3 { font-size:16.5px; font-weight:600; color:var(--ink); margin:24px 0 8px; }
+  section { scroll-margin-top:20px; margin-top:48px; }
+  p { margin:0 0 14px; max-width:66ch; }
+  a { color:var(--blue); }
+  strong { color:var(--ink); font-weight:600; }
+  ul, ol { max-width:66ch; padding-left:22px; } li { margin:5px 0; }
+
+  pre { background:var(--deep); border-radius:10px; padding:18px 20px; overflow-x:auto; margin:16px 0;
+        font-family:'IBM Plex Mono',monospace; font-size:13px; line-height:1.7; color:#dbe6f2; }
+  pre .c { color:#6f8196; } pre .s { color:#8fd0a0; } pre .k { color:#7fb0ee; } pre .n{ color:#e0b978; }
+  code:not(pre code) { font-family:'IBM Plex Mono',monospace; font-size:.87em;
+        background:var(--blueSoft); color:var(--ink); padding:1px 6px; border-radius:4px; }
+
+  .usecase { background:var(--card); border:1px solid var(--line); border-radius:12px;
+             padding:24px 26px; box-shadow:var(--shadow); margin:20px 0; }
+  .usecase .tag { font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:2px;
+        text-transform:uppercase; color:var(--blue); }
+  .usecase h3 { margin:6px 0 4px; font-size:19px; font-family:'Fraunces',serif; font-weight:600; }
+  .usecase .who { font-size:13.5px; color:var(--mut); margin-bottom:6px; }
+  .usecase pre { margin-bottom:8px; }
+
+  table { width:100%; border-collapse:collapse; margin:16px 0; font-size:14px; display:block; overflow-x:auto; }
+  th, td { text-align:left; padding:9px 12px; border-bottom:1px solid var(--line2); vertical-align:top; }
+  th { font-size:11px; letter-spacing:1px; text-transform:uppercase; color:var(--faint); font-weight:600; }
+  td.mono, td .mono { font-size:12.5px; color:var(--ink); }
+  tbody tr:last-child td { border-bottom:none; }
+
+  .chips { display:flex; flex-wrap:wrap; gap:8px; margin:12px 0; }
+  .chip { font-size:12.5px; border:1px solid var(--line); border-radius:20px; padding:4px 12px; }
+  .chip b { color:var(--ink); }
+  .c-green{ border-color:var(--green); color:var(--green);} .c-amber{ border-color:var(--amberLine); color:var(--amber);}
+  .c-red{ border-color:var(--redLine); color:var(--red);} .c-blue{ border-color:var(--blueLine); color:var(--blue);}
+
+  .callout { border:1px solid var(--amberLine); background:var(--amberSoft); border-radius:9px;
+             padding:14px 18px; margin:16px 0; font-size:14px; }
+  .callout b { color:var(--ink); }
+  .note { border-left:3px solid var(--blue); background:var(--sunk); border-radius:0 8px 8px 0;
+          padding:12px 16px; margin:16px 0; font-size:14px; }
+
+  header.top { border-bottom:1px solid var(--line); padding-bottom:26px; }
+  .meta { display:flex; flex-wrap:wrap; gap:8px 20px; font-size:12.5px; color:var(--faint); margin-top:18px; }
+  .meta b { color:var(--body); font-weight:500; }
+</style>
+
+<div class="layout">
+  <aside>
+    <div class="brand">Attest</div>
+    <div class="btag">SDK Reference</div>
+    <nav>
+      <span class="grp">Start</span>
+      <a href="#model">Mental model</a>
+      <a href="#install">Install &amp; configure</a>
+      <a href="#gate">The gate call</a>
+      <a href="#verdict">Reading the verdict</a>
+      <span class="grp">Core flows</span>
+      <a href="#fixes">Fixes &amp; rewrites</a>
+      <a href="#auto">Per-tier auto-remediation</a>
+      <a href="#approvals">Approvals</a>
+      <a href="#traces">Multi-step traces</a>
+      <a href="#offline">Offline resilience</a>
+      <a href="#consent">Customer-key &amp; consent</a>
+      <span class="grp">Reference</span>
+      <a href="#cases">Worked use cases</a>
+      <a href="#result">GateResult fields</a>
+      <a href="#http">Without the SDK</a>
+    </nav>
+  </aside>
+
+  <main>
+    <header class="top">
+      <p class="eyebrow">Python SDK · v0.2</p>
+      <h1>The Attest SDK, end to end</h1>
+      <p class="lede">How the SDK works, every configuration that matters, and in-depth worked
+        examples for the situations you'll actually hit — the happy path, a blocked action, a
+        multi-step pipeline, an Attest outage, and a customer-key deployment.</p>
+      <div class="meta">
+        <span><b>Language</b> Python 3.11+</span>
+        <span><b>Runtime dep</b> requests</span>
+        <span><b>Install</b> one wheel</span>
+        <span><b>Integration</b> one function call</span>
+      </div>
+    </header>
+
+    <section id="model">
+      <h2>The mental model</h2>
+      <p>The SDK is three things in one object: a <strong>thin HTTP client</strong> to the Attest
+        API, a <strong>local policy pre-check</strong> for speed, and a <strong>durable offline
+        buffer</strong> so an outage never leaves a hole in your audit trail. You interact with
+        almost all of it through a single method — <code>gate()</code>.</p>
+      <p>The contract is deliberately narrow: <strong>Attest reports, your code decides.</strong>
+        The gate evaluates an output, records the decision and the output as signed, chained,
+        externally-anchored events, and returns a verdict. It never changes what your application
+        does on its own — with one opt-in exception you configure (auto-remediation, below).</p>
+      <div class="note">Everything the SDK sends is sealed into a tamper-evident chain. That is the
+        product: not the verdict in the moment, but the <em>provable record</em> of it afterwards.</div>
+    </section>
+
+    <section id="install">
+      <h2>Install &amp; configure</h2>
+      <pre><span class="c"># the wheel is provided by your Attest contact</span>
+pip install attest_sdk-0.2.0-py3-none-any.whl</pre>
+      <p>Create the client <strong>once at startup</strong> — it holds a local cache, an offline
+        queue and a device key, so it's a long-lived singleton, not a per-request object.</p>
+      <pre><span class="k">from</span> attest_sdk <span class="k">import</span> AttestClient
+
+attest = AttestClient(
+    api_key=os.environ[<span class="s">"ATTEST_API_KEY"</span>],   <span class="c"># never hardcode</span>
+    base_url=<span class="s">"https://attest-api-ipvl.onrender.com"</span>,
+    auto_remediate={<span class="s">"yellow"</span>: <span class="s">"auto"</span>, <span class="s">"orange"</span>: <span class="s">"auto"</span>, <span class="s">"red"</span>: <span class="s">"human"</span>},
+)
+attest.prepare_offline()   <span class="c"># optional: be outage-ready before the first request</span></pre>
+      <h3>Constructor options</h3>
+      <table>
+        <thead><tr><th>Option</th><th>Default</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">api_key</td><td class="mono">—</td><td>Your org key. Identifies and authorises you; stored hashed server-side.</td></tr>
+          <tr><td class="mono">base_url</td><td class="mono">localhost</td><td>Your Attest service URL.</td></tr>
+          <tr><td class="mono">fail_mode</td><td class="mono">deny_on_error</td><td>How a policy-engine error is treated: fail closed (deny) or open (flag).</td></tr>
+          <tr><td class="mono">auto_remediate</td><td class="mono">{}</td><td>Per-tier auto/human fix policy. Empty = suggest-only. See below.</td></tr>
+          <tr><td class="mono">offline_enabled</td><td class="mono">True</td><td>Keep serving and keep the trail during an outage. On by default — a hole in the audit trail should never be opt-in.</td></tr>
+          <tr><td class="mono">enable_local_precheck</td><td class="mono">True</td><td>Evaluate green/yellow locally; escalate orange/red to the server.</td></tr>
+          <tr><td class="mono">state_dir</td><td class="mono">~/.attest</td><td>Where the offline queue and device key live. Must persist across restarts.</td></tr>
+          <tr><td class="mono">server_timeout</td><td class="mono">5.0s</td><td>Per-request timeout before the offline path takes over.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="gate">
+      <h2>The gate call</h2>
+      <p>This is the whole integration. After your model produces an output, pass it to
+        <code>gate()</code> before a user sees it.</p>
+      <pre>result = attest.gate(
+    {<span class="s">"output"</span>: brief_text},        <span class="c"># the AI output (+ any context) to judge and record</span>
+    action=<span class="s">"model_completion"</span>,       <span class="c"># what happened, in your vocabulary</span>
+    trace=None,                       <span class="c"># group multi-step stories (optional)</span>
+    on_error=<span class="s">"flag"</span>,               <span class="c"># outage behaviour: "flag" keeps serving, "raise" throws</span>
+)</pre>
+      <p>Sequence numbers are assigned server-side — you never manage them. Put the user-facing
+        text under <code>"output"</code>; add a <code>"classifier"</code> field when your own
+        pipeline already knows the output is individualised advice, so the advice rules key on it.</p>
+    </section>
+
+    <section id="verdict">
+      <h2>Reading the verdict</h2>
+      <p>The <code>GateResult</code> tells you what to do. Four outcomes you handle, plus two
+        conditions from an outage.</p>
+      <div class="chips">
+        <span class="chip c-green"><b>compliant</b> serve it</span>
+        <span class="chip c-amber"><b>flagged</b> allowed, but review / fix</span>
+        <span class="chip c-red"><b>blocked</b> withhold; approval needed</span>
+        <span class="chip c-blue"><b>unevaluated</b> recorded, no active policy yet</span>
+      </div>
+      <pre><span class="k">if</span> result.blocked:
+    serve(<span class="s">"This response is being reviewed before release."</span>)   <span class="c"># approval_id is set</span>
+<span class="k">elif</span> result.auto_remediation <span class="k">and</span> result.auto_remediation[<span class="s">"applied"</span>]:
+    serve(result.auto_remediation[<span class="s">"output"</span>][<span class="s">"output"</span>])         <span class="c"># the cured text</span>
+<span class="k">elif</span> result.flagged:
+    review_queue.put(result); serve(brief_text)               <span class="c"># flagged != forbidden</span>
+<span class="k">else</span>:
+    serve(brief_text)                                         <span class="c"># compliant / unevaluated</span></pre>
+      <p>Log <code>result.summary()</code> on every call — a one-line record that makes support
+        conversations trivial. During an outage you'll also see <code>result.offline</code> (the
+        verdict is provisional, from cached rules) or <code>result.buffered</code> (queued to
+        replay), and <code>result.recorded</code> tells you whether the server has it yet.</p>
+    </section>
+
+    <section id="fixes">
+      <h2>Fixes &amp; verified rewrites</h2>
+      <p>A flagged verdict carries a <strong>suggested fix</strong>. Mechanical problems get a
+        deterministic fix (personal data redacted to labelled tokens, promissory phrasing softened),
+        each edit naming the finding it cures. Judgement calls a rule can't mechanically fix get a
+        model-drafted <strong>rewrite</strong> — which the deterministic engine re-judges and only
+        offers if it now passes. The model proposes; the gate disposes.</p>
+      <pre><span class="k">if</span> result.flagged <span class="k">and</span> result.has_fix:
+    fixed = result.apply_suggestion()        <span class="c"># a copy of the revised payload</span>
+    proof = attest.gate(fixed, trace=result.trace_id,
+                        remediates=result.decision_seq)
+    <span class="c"># proof.compliant → the flag is closed in the sealed history</span>
+
+<span class="k">if</span> result.rewrite <span class="k">and</span> result.rewrite[<span class="s">"requires_human_confirmation"</span>]:
+    <span class="c"># the draft changed what the output IS — a person confirms, then:</span>
+    proof = attest.gate(result.apply_rewrite(), trace=result.trace_id,
+                        remediates=result.decision_seq)</pre>
+      <p>The <code>remediates=</code> argument names the flagged decision this output cures; the fix
+        must land in the same trace as the flag, so the flagged → fixed link is part of the sealed
+        story, not an annotation anyone could drop.</p>
+    </section>
+
+    <section id="auto">
+      <h2>Per-tier auto-remediation</h2>
+      <p>You decide, per risk tier, whether the SDK applies a verified fix itself or leaves it to a
+        person. One line, set at construction.</p>
+      <pre>auto_remediate={<span class="s">"yellow"</span>: <span class="s">"auto"</span>, <span class="s">"orange"</span>: <span class="s">"auto"</span>, <span class="s">"red"</span>: <span class="s">"human"</span>}</pre>
+      <p>With a tier set to <code>auto</code>, a flagged output at that tier whose fix is
+        <strong>complete and gate-verified</strong> is applied and re-gated <em>inside the same
+        <code>gate()</code> call</em>. You get the final (usually compliant) verdict back, annotated
+        with <code>result.auto_remediation</code> — including <code>output</code> (the cured payload
+        to serve) and <code>remediated_seq</code> (the flag it closed). The original flag stays
+        sealed in the chain; auto mode changes who presses the button, never what gets recorded.</p>
+      <div class="callout"><b>Three lines auto mode never crosses,</b> whatever you configure:
+        blocked verdicts (your own policy denied the action); rewrites marked
+        <code>requires_human_confirmation</code> (the meaning changed — a person confirms); and
+        incomplete fixes (anything unresolved or missing evidence would just re-flag).</div>
+    </section>
+
+    <section id="approvals">
+      <h2>Approvals</h2>
+      <p>A blocked verdict names a pending approval in <code>result.approval_id</code>. A compliance
+        officer resolves it — from the console as a signed-in person, or programmatically:</p>
+      <pre>attest.resolve_approval(result.approval_id, status=<span class="s">"approved"</span>,   <span class="c"># or "denied"</span>
+                        approver_id=<span class="s">"officer_1"</span>, comment=<span class="s">"reviewed"</span>)</pre>
+      <p>The resolution itself becomes a signed event in the same chain. Resolved in the console by
+        a logged-in user, it records that <em>verified</em> person, which is stronger evidence than
+        a name passed over the API.</p>
+    </section>
+
+    <section id="traces">
+      <h2>Multi-step traces</h2>
+      <p>Each <code>gate()</code> is its own record by default. To tell one story across steps —
+        retrieval, tool call, final answer — pass the trace forward.</p>
+      <pre>step1 = attest.gate({<span class="s">"draft"</span>: draft})
+attest.gate({<span class="s">"tool"</span>: <span class="s">"price_lookup"</span>, <span class="s">"result"</span>: price},
+            action=<span class="s">"tool_call"</span>, trace=step1.trace_id)
+final = attest.gate({<span class="s">"output"</span>: answer}, trace=step1.trace_id)</pre>
+      <p>The whole trace replays as one verifiable sequence, and an evidence bundle for it proves
+        the entire chain of reasoning, not just the last line.</p>
+    </section>
+
+    <section id="offline">
+      <h2>Offline resilience</h2>
+      <p>Nothing to build — it's on by default. If Attest is unreachable, <code>gate()</code> does
+        not raise (unless you asked for <code>on_error="raise"</code>): it evaluates locally against
+        cached rules, signs the claim with a per-device key, and queues it durably under
+        <code>state_dir</code>. On the next successful call the backlog is handed over and verified
+        signature-by-signature before anything is recorded.</p>
+      <pre>attest.pending_offline    <span class="c"># events waiting to be handed over; 0 in steady state</span>
+attest.flush_offline()    <span class="c"># force a replay attempt; returns how many were accepted</span></pre>
+      <div class="callout"><b>The one thing never buffered:</b> a remediation
+        (<code>remediates=</code>). A "this fixes decision N" claim is only true once the server has
+        checked it against the real chain — queueing it unvalidated would let a dead network mint
+        links nobody verified. During an outage a remediation returns <code>error</code>, and you
+        retry when Attest is back.</div>
+      <p>Expose <code>pending_offline</code> in your health endpoint; a non-zero value that never
+        drains means the replay path needs attention.</p>
+    </section>
+
+    <section id="consent">
+      <h2>Customer-key &amp; consent</h2>
+      <p>If you'd rather Attest couldn't read your stored content, the consent client sets up
+        customer-key mode: content is encrypted to a key you hold, and stored records are dark to
+        Attest until you deliberately release one.</p>
+      <pre><span class="k">from</span> attest_sdk <span class="k">import</span> ConsentClient
+consent = ConsentClient(api_key=..., base_url=...)
+priv, pub = consent.generate_wrapping_keypair()   <span class="c"># keep priv in YOUR custody</span>
+consent.enable_customer_key(public_pem=pub)
+
+<span class="c"># later, when Attest requests a specific record for review:</span>
+consent.approve(request_id, granular=True)         <span class="c"># releases exactly one record</span>
+consent.deny(request_id)                            <span class="c"># Attest reads nothing</span></pre>
+      <p>Every request and your answer are themselves recorded, so the access history is as
+        tamper-evident as everything else.</p>
+    </section>
+
+    <section id="cases">
+      <h2>Worked use cases</h2>
+
+      <div class="usecase">
+        <span class="tag">Use case 1 · the core loop</span>
+        <h3>Market briefs that self-heal on the routine stuff</h3>
+        <div class="who">A DIFC market-intelligence desk, yellow/orange on auto, red to a human.</div>
+        <pre>result = attest.gate({<span class="s">"output"</span>: brief_text})
+
+<span class="k">if</span> result.blocked:
+    publish(HOLD_MESSAGE)                       <span class="c"># e.g. an execute-trade instruction</span>
+<span class="k">elif</span> result.auto_remediation <span class="k">and</span> result.auto_remediation[<span class="s">"applied"</span>]:
+    publish(result.auto_remediation[<span class="s">"output"</span>][<span class="s">"output"</span>])  <span class="c"># PII already redacted</span>
+<span class="k">else</span>:
+    publish(brief_text)</pre>
+        <p style="margin:0;font-size:14px;color:var(--mut);">A brief mentioning a client's email is
+          silently corrected and published, its flag-and-fix sealed. A brief that reads as
+          individualised advice, if the rewrite is clean and needs no human confirm, is likewise
+          healed. Anything your policy forbids outright still stops and waits.</p>
+      </div>
+
+      <div class="usecase">
+        <span class="tag">Use case 2 · the human gate</span>
+        <h3>A high-risk action held for clearance</h3>
+        <div class="who">An automated action your own policy denies unattended.</div>
+        <pre>result = attest.gate({<span class="s">"output"</span>: <span class="s">"execute buy 500 XAUUSD"</span>}, action=<span class="s">"execute_trade"</span>)
+<span class="k">assert</span> result.blocked <span class="k">and</span> result.approval_id
+
+<span class="c"># officer reviews in the console and approves as themselves; or programmatically:</span>
+attest.resolve_approval(result.approval_id, status=<span class="s">"approved"</span>,
+                        approver_id=<span class="s">"risk.officer"</span>, comment=<span class="s">"within mandate"</span>)</pre>
+        <p style="margin:0;font-size:14px;color:var(--mut);">The block, the review, and the named
+          approver are all in one sealed trace — exactly the record a DIFC audit asks for.</p>
+      </div>
+
+      <div class="usecase">
+        <span class="tag">Use case 3 · a reasoning pipeline</span>
+        <h3>Prove the whole chain, not just the answer</h3>
+        <div class="who">A retrieval-augmented assistant answering a client question.</div>
+        <pre>t = attest.new_trace()
+attest.gate({<span class="s">"query"</span>: q}, action=<span class="s">"user_query"</span>, trace=t)
+attest.gate({<span class="s">"retrieved"</span>: docs}, action=<span class="s">"retrieval"</span>, trace=t)
+final = attest.gate({<span class="s">"output"</span>: answer}, action=<span class="s">"model_completion"</span>, trace=t)</pre>
+        <p style="margin:0;font-size:14px;color:var(--mut);">If the final answer is later questioned,
+          you can show what was retrieved and how the answer followed — a verifiable lineage, not a
+          bare claim.</p>
+      </div>
+
+      <div class="usecase">
+        <span class="tag">Use case 4 · surviving an outage</span>
+        <h3>Keep serving, keep the trail</h3>
+        <div class="who">Attest is briefly unreachable during a deploy or network blip.</div>
+        <pre>result = attest.gate({<span class="s">"output"</span>: brief_text})
+<span class="k">if</span> result.offline:
+    <span class="c"># provisional local verdict; the signed claim is queued durably</span>
+    publish(brief_text)
+<span class="c"># next successful gate() drains the queue automatically; or force it:</span>
+sent = attest.flush_offline()</pre>
+        <p style="margin:0;font-size:14px;color:var(--mut);">Your product never stalls on Attest, and
+          the audit trail has no gap — the queued events replay, verified, the moment it's back.</p>
+      </div>
+
+      <div class="usecase">
+        <span class="tag">Use case 5 · content stays dark</span>
+        <h3>A confidential deployment</h3>
+        <div class="who">A firm that will not let a vendor read client content at rest.</div>
+        <pre>priv, pub = consent.generate_wrapping_keypair()
+consent.enable_customer_key(public_pem=pub)
+<span class="c"># gate() is unchanged; content is now encrypted to YOUR key at rest.</span>
+result = attest.gate({<span class="s">"output"</span>: brief_text})
+<span class="c"># dashboards still work on signed metadata; content is unreadable to Attest</span>
+<span class="c"># until you consent.approve(request_id) for a specific record.</span></pre>
+        <p style="margin:0;font-size:14px;color:var(--mut);">You get the full audit and compliance
+          story with none of the content ever legible to Attest or its host.</p>
+      </div>
+    </section>
+
+    <section id="result">
+      <h2>GateResult reference</h2>
+      <table>
+        <thead><tr><th>Field</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">status</td><td>compliant · flagged · blocked · unevaluated · error</td></tr>
+          <tr><td class="mono">tier</td><td>green · yellow · orange · red</td></tr>
+          <tr><td class="mono">allowed</td><td>Whether Attest permitted the output (only your policy can deny).</td></tr>
+          <tr><td class="mono">compliant / flagged / blocked / evaluated</td><td>Boolean conveniences over <code>status</code>.</td></tr>
+          <tr><td class="mono">trace_id / decision_seq</td><td>Identifiers you pass to <code>remediates=</code> and to group steps.</td></tr>
+          <tr><td class="mono">findings</td><td>What was raised, each citing its regulatory instrument.</td></tr>
+          <tr><td class="mono">has_fix / suggested_fix</td><td>Whether a fix rides with the verdict, and the fix itself.</td></tr>
+          <tr><td class="mono">rewrite</td><td>A gate-verified model rewrite, when one was drafted; may need human confirm.</td></tr>
+          <tr><td class="mono">apply_suggestion() / apply_rewrite()</td><td>Return the revised payload to re-gate.</td></tr>
+          <tr><td class="mono">auto_remediation</td><td>Present when the SDK auto-applied a cure: applied, cure, output, remediated_seq.</td></tr>
+          <tr><td class="mono">recorded / buffered / offline</td><td>Whether the server has it, it's queued, or it's a provisional local verdict.</td></tr>
+          <tr><td class="mono">approval_id</td><td>Set on a blocked verdict; the pending approval to resolve.</td></tr>
+          <tr><td class="mono">error / summary()</td><td>Failure detail (on error), and a one-line log string for every verdict.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="http">
+      <h2>Without the SDK</h2>
+      <p>The SDK is a convenience over a plain REST API. Any language can integrate with one POST:</p>
+      <pre>POST /v1/gate
+x-api-key: &lt;your key&gt;
+{ <span class="s">"action"</span>: <span class="s">"model_completion"</span>, <span class="s">"output"</span>: { <span class="s">"output"</span>: <span class="s">"…"</span> } }
+
+<span class="c"># → { "status": "flagged", "tier": "orange", "trace_id": "…",</span>
+<span class="c">#     "decision_seq": 3, "suggested_fix": { … }, "approval_id": null }</span></pre>
+      <p>You lose the offline buffer, the local pre-check and the device chain — but the verdict,
+        the sealed record and the remediation loop all work exactly the same. Questions go to your
+        Attest contact.</p>
+    </section>
+  </main>
+</div>

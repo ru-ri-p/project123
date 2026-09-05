@@ -1050,3 +1050,27 @@ Suite 280 (auth/preview/security). Landing/guide are static, not in pytest.
 Founder still owes: Render deploy of everything + ANTHROPIC_API_KEY + dress
 rehearsal; then domain (unlocks real login email + form delivery). Website
 deploy is theirs (static host + domain + Formspree id).
+
+--- 2026-09-05 — SDK guide, GTM/pricing analysis, prospect sheet ---
+Three founder-facing deliverables (all use the Attest doc-family identity:
+Fraunces + IBM Plex, product palette, theme-aware):
+1. SDK guide: docs/SDK_GUIDE.html + Artifact
+   https://claude.ai/code/artifact/5757cb63-b104-44bc-ab46-759f5c013469
+   (mental model, config table, gate/verdict, fixes+rewrites, auto-remediate,
+   approvals, traces, offline, consent, 5 worked use cases, GateResult ref,
+   plain-HTTP fallback).
+2. GTM + pricing (business-analyst): docs/GTM_PRICING_ANALYSIS.html + Artifact
+   https://claude.ai/code/artifact/20a0f35f-6b09-405a-92a2-547210dee8d0
+   ICP 3 rings, buyer personas, value table, competitive wedge, segment
+   pricing (Growth/Institution/Public/OEM) + add-ons, land-expand-deepen.
+   PRICES ARE A PROPOSED MODEL WITH RANGES TO VALIDATE — labelled as such,
+   not observed prices.
+3. Prospect sheet: native Google Sheet in founder's Drive
+   https://docs.google.com/spreadsheets/d/1r8n6GoWdGRXwLLCFNOlNe_Twmhfx8GV8ZMz453WueSE/edit
+   + docs/PROSPECT_TARGETS.csv. 20 REAL public UAE orgs/roles + warm-intro
+   PATHS + angles + priority. Deliberately did NOT fabricate named individuals
+   or reporting lines — "Named individual (VERIFY on LinkedIn)" column left
+   blank; offered a WebSearch enrichment pass the founder verifies before
+   sending. Honest-data principle held.
+Note: WebSearch is available if founder wants candidate named people attached
+to each org (flag as verify-before-send).
