@@ -729,3 +729,28 @@ class WorkQueueOut(BaseModel):
     open_flags: list[WorkQueueFlagItem]
     rewrite_confirmations: list[WorkQueueFlagItem]
     counts: WorkQueueCounts
+
+
+class PolicyPreviewIn(BaseModel):
+    action: str = Field(default="model_completion", min_length=1)
+    output: dict[str, Any]
+    # Test against a specific stored version; omitted = the active policy.
+    policy_version: str | None = None
+    # A candidate ruleset to test WITHOUT activating it. Omitted = use the
+    # stored policy's rules. Same shape as a policy's `rules`.
+    candidate_rules: dict[str, Any] | None = None
+
+
+class PolicyPreviewOut(BaseModel):
+    status: str
+    error: str | None = None
+    tier: str | None = None
+    policy_tier: str | None = None
+    decision: str | None = None
+    allowed: bool | None = None
+    reasons: list[str] = Field(default_factory=list)
+    rule_id: str | None = None
+    findings: list[dict[str, Any]] = Field(default_factory=list)
+    jurisdictions: list[str] = Field(default_factory=list)
+    remediation_preview: dict[str, Any] | None = None
+    recorded: bool = False

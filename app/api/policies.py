@@ -28,10 +28,13 @@ from app.schemas import (
     OrgProfileOut,
     PolicyDecisionOut,
     PolicyOut,
+    PolicyPreviewIn,
+    PolicyPreviewOut,
     ProfileUpdateOut,
     RegulationPackOut,
 )
 from app.services import org_profile as profile_service
+from app.services import policy_preview
 from app.services import regulation_packs as pack_service
 from app.services.precheck import NoActivePolicyError
 
@@ -95,6 +98,39 @@ def put_internal_policy(
 
 
 # --- Jurisdictions & regulation packs -----------------------------------------
+
+
+@router.post("/preview", response_model=PolicyPreviewOut)
+def preview_policy(
+    body: PolicyPreviewIn,
+    org: Org = Depends(get_authenticated_org),
+    db: Session = Depends(get_db),
+) -> PolicyPreviewOut:
+    """Dry-run a sample output against a policy — nothing is recorded.
+
+    Rules tested, in order of precedence: an inline candidate ruleset (test an
+    edit before activating it), else a named stored version, else the active
+    policy. Answers 'what would this rule do?' and 'why was that flagged?'
+    with the exact pipeline the gate uses.
+    """
+    if body.candidate_rules is not None:
+        rules = body.candidate_rules
+        version = body.policy_version or "candidate"
+    else:
+        policy = (
+            policy_repo.get_policy_by_version(db, org.id, body.policy_version)
+            if body.policy_version
+            else policy_repo.get_active_policy(db, org.id)
+        )
+        if policy is None:
+            raise HTTPException(status_code=404, detail="no such policy")
+        rules = policy.rules if isinstance(policy.rules, dict) else {}
+        version = policy.version
+    result = policy_preview.preview(
+        db, org=org, action=body.action, payload=body.output,
+        policy_version=version, rules=rules,
+    )
+    return PolicyPreviewOut(**result)
 
 
 @router.get("/jurisdictions", response_model=list[JurisdictionOut])

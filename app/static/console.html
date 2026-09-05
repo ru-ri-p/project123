@@ -352,6 +352,21 @@
       </div>
 
       <div class="card" style="margin-bottom:14px;">
+        <div class="eyebrow">TEST A RULE — DRY RUN</div>
+        <div class="kv2" style="margin:6px 0 12px;">Paste a sample AI output and see the verdict your
+          <b>active policy</b> would return — nothing is recorded, no trace is created. Use it to
+          check a rule does what you expect before you rely on it.</div>
+        <textarea id="preview-output" placeholder='{"output": "For the allocation, contact sara.m@example.com"}'
+          style="width:100%;min-height:64px;border:1px solid var(--line3);border-radius:4px;padding:8px 10px;font:12.5px/1.5 'IBM Plex Mono',monospace;resize:vertical;"></textarea>
+        <div class="row" style="margin-top:8px;gap:8px;">
+          <input id="preview-action" value="model_completion"
+            style="width:180px;border:1px solid var(--line3);border-radius:4px;padding:6px 9px;font:inherit;font-size:12.5px;">
+          <button class="btn primary" id="btn-preview" style="margin:0;">Test</button>
+        </div>
+        <div id="preview-out" style="margin-top:12px;"></div>
+      </div>
+
+      <div class="card" style="margin-bottom:14px;">
         <div class="row">
           <div class="eyebrow">RECENT DECISIONS</div>
           <label style="margin:0 0 0 auto;display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--mut);">
@@ -928,6 +943,31 @@ function loadCompliance() { loadSummary(); loadMyPacks(); loadDecisions(); }
 $("#btn-mypacks").addEventListener("click", loadMyPacks);
 $("#btn-decisions").addEventListener("click", loadDecisions);
 $("#flagged-only").addEventListener("change", loadDecisions);
+
+async function runPreview() {
+  const box = $("#preview-out");
+  let output;
+  try { output = JSON.parse($("#preview-output").value || "{}"); }
+  catch (e) { box.innerHTML = '<div class="empty" style="color:var(--red);">Not valid JSON — wrap your text like {"output": "…"}.</div>'; return; }
+  box.innerHTML = '<div class="empty">Testing…</div>';
+  try {
+    const r = await api.call("/v1/policies/preview", { method: "POST",
+      body: { action: $("#preview-action").value.trim() || "model_completion", output } });
+    if (r.status === "error") { box.innerHTML = `<div class="empty" style="color:var(--red);">Policy error: ${esc(r.error || "")}</div>`; return; }
+    const reasons = (r.reasons || []).map((x) => `<li>${esc(x)}</li>`).join("");
+    const cites = (r.findings || []).map((f) => esc(f.instrument || f.rule_id || "")).filter(Boolean);
+    const fix = r.remediation_preview;
+    box.innerHTML = `
+      <div class="rowline" style="border:none;padding:4px 0;">
+        ${statusChip(r)}
+        <div class="kv2">tier <b>${esc((r.tier||"—").toUpperCase())}</b>${r.allowed === false ? " · would be withheld" : ""} · <b>nothing recorded</b></div>
+      </div>
+      ${reasons ? `<ul class="kv2" style="margin:6px 0 0 4px;">${reasons}</ul>` : ""}
+      ${cites.length ? `<div class="kv2" style="margin-top:6px;">Cited: ${cites.map(esc).join(", ")}</div>` : ""}
+      ${fix ? `<div class="kv2" style="margin-top:6px;">Fix available: ${esc((fix.edit_kinds||[]).join(", ") || "see suggestion")}${fix.has_rewrite ? " + verified rewrite" : ""}${fix.unresolved_count ? ` · ${fix.unresolved_count} needing judgement` : ""}</div>` : ""}`;
+  } catch (e) { box.innerHTML = `<div class="empty" style="color:var(--red);">${esc(e.message)}</div>`; }
+}
+$("#btn-preview").addEventListener("click", runPreview);
 
 // A small, deliberately minimal starting point. It is the institution's policy,
 // so it ships nearly empty: two obvious rules to edit, not a pretence that Attest
