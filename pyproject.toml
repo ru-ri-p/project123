@@ -11,14 +11,14 @@ requires-python = ">=3.11"
 # default (an Attest outage must not create a hole in the audit trail), and it
 # needs the device signing key and the encrypted local buffer. Making it opt-in
 # would mean the safe behaviour is the one nobody installs.
-dependencies = ["requests>=2.32.0", "cryptography>=43.0.0"]
+dependencies = ["requests>=2.32.0", "cryptography>=50.0.1"]
 readme = "attest_sdk/README.md"
 
 # Kept so existing `attest-sdk[consent]` installs keep working; it now resolves
 # to the same set as the base install.
 [project.optional-dependencies]
-consent = ["cryptography>=43.0.0"]
-offline = ["cryptography>=43.0.0"]
+consent = ["cryptography>=50.0.1"]
+offline = ["cryptography>=50.0.1"]
 
 [tool.setuptools]
 packages = ["attest_sdk", "attest_sdk.policy"]
