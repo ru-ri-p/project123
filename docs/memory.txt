@@ -1074,3 +1074,33 @@ Fraunces + IBM Plex, product palette, theme-aware):
    sending. Honest-data principle held.
 Note: WebSearch is available if founder wants candidate named people attached
 to each org (flag as verify-before-send).
+
+--- 2026-09-05 — competitive landscape research (task #22) ---
+Four parallel research subagents (AI-governance platforms; tamper-evident/
+provenance tech; FS RegTech & AI-compliance; UAE/GCC regulators+ecosystem).
+Synthesis: docs/COMPETITIVE_LANDSCAPE.html + Artifact
+https://claude.ai/code/artifact/4b6d97df-346f-4a17-8087-c71dda5208d5 + PDF.
+KEY FINDINGS (carry into strategy):
+- Attest's crypto is COMMODITY now (SCITT is an IETF std w/ MS GA impl;
+  Sigstore Rekor v2 = ~90% of backend). Stop pitching the hash chain.
+- Direct head-to-head micro-cluster emerged 2025-26: Attested Intelligence
+  (AGA), VeritasChain (VCP, filed SCITT profile), Senthex (gate+anchor+PQ),
+  DeepInspect (gate+HMAC, CISO), Soma/NexArt/SteelSpine/Vaara/KYDE/wirken.
+- Incumbents (Credo, IBM watsonx [live at e& UAE], OneTrust, Collibra,
+  ServiceNow, Monitaur, ModelOp) = governance WORKFLOW; "immutable" = DB-grade.
+- Archivers (Global Relay, Smarsh, Theta Lake) own "tamper-evident system of
+  record" via WORM+vendor-attested — MESSAGING COLLISION; must teach WORM !=
+  externally-anchored/insider-proof (#1 narrative battle).
+- FS RegTech gate players (Norm Ai $267M, Sedric, Saifr) = mutable logs.
+- UAE: demand real & dated (DIFC Reg 10 enforced 1 Jan 2026; CBUAE AI/ML
+  guidance Feb 2026 no vendor carve-out; DFSA 6yr reproducible; EU AI Act
+  Art 12 2 Aug 2026). No local crypto-evidence competitor; G42×Credo AI is
+  the regional mindshare gorilla (adjacent/partnerable). No UAE mandate for
+  crypto tamper-evidence specifically -> selling ahead of the letter.
+- MOATS: customer-key + external anchor (insider-proof, found in NO
+  competitor); gate+anchored-record bundle; UAE-qualified TSA + DFSA/FSRA/
+  CBUAE packs; SCITT interop (don't reinvent); design-partner/cert GTM.
+- VERIFY before external use: Monitaur crypto-log claim; Holistic AI funding
+  (ignore $300M = Paris lab "H"); WhyLabs->Apple; exact round sizes/dates;
+  "Delphi" unresolved. Method: WebFetch proxy-blocked, much from search
+  summaries (flagged in doc §07).

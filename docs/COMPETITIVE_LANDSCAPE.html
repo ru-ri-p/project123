@@ -1,0 +1,411 @@
+<title>Attest Competitive Landscape</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root {
+    --bg:#eef0f3; --card:#ffffff; --sunk:#f5f6f9; --deep:#111a24;
+    --line:#dce0e7; --line2:#e7eaef;
+    --ink:#141d2a; --body:#3a4453; --mut:#5a6779; --faint:#8a94a2;
+    --blue:#1568d4; --blueSoft:rgba(21,104,212,.09); --blueLine:#b9d5f5;
+    --gold:#9a6a1e; --goldSoft:rgba(154,106,30,.10); --goldLine:#cba25e;
+    --green:#20713a; --greenSoft:rgba(32,113,58,.12); --red:#b03a2e; --redSoft:rgba(176,58,46,.10);
+    --shadow:0 1px 2px rgba(20,29,42,.05), 0 10px 30px -20px rgba(20,29,42,.35);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg:#0d131b; --card:#151e28; --sunk:#101822; --deep:#080d13;
+      --line:#263140; --line2:#1e2731;
+      --ink:#eef2f6; --body:#c2ccd8; --mut:#93a0b0; --faint:#6b7888;
+      --blue:#63a4f0; --blueSoft:rgba(99,164,240,.12); --blueLine:#2f4d6e;
+      --gold:#cfa860; --goldSoft:rgba(207,168,96,.13); --goldLine:#5c4a24;
+      --green:#5fbf80; --greenSoft:rgba(95,191,128,.13); --red:#e0897d; --redSoft:rgba(224,137,125,.12);
+      --shadow:0 1px 2px rgba(0,0,0,.35), 0 12px 34px -22px rgba(0,0,0,.7);
+    }
+  }
+  :root[data-theme="dark"] {
+      --bg:#0d131b; --card:#151e28; --sunk:#101822; --deep:#080d13;
+      --line:#263140; --line2:#1e2731;
+      --ink:#eef2f6; --body:#c2ccd8; --mut:#93a0b0; --faint:#6b7888;
+      --blue:#63a4f0; --blueSoft:rgba(99,164,240,.12); --blueLine:#2f4d6e;
+      --gold:#cfa860; --goldSoft:rgba(207,168,96,.13); --goldLine:#5c4a24;
+      --green:#5fbf80; --greenSoft:rgba(95,191,128,.13); --red:#e0897d; --redSoft:rgba(224,137,125,.12);
+      --shadow:0 1px 2px rgba(0,0,0,.35), 0 12px 34px -22px rgba(0,0,0,.7);
+  }
+  * { box-sizing:border-box; }
+  html { scroll-behavior:smooth; }
+  body { margin:0; background:var(--bg); color:var(--body);
+         font:16px/1.62 'IBM Plex Sans',-apple-system,'Segoe UI',sans-serif; -webkit-font-smoothing:antialiased; }
+  .mono { font-family:'IBM Plex Mono',ui-monospace,monospace; }
+  .wrap { max-width:900px; margin:0 auto; padding:0 24px 100px; }
+  header.top { max-width:900px; margin:0 auto; padding:56px 24px 28px; }
+  .doc-eyebrow { font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:2.5px;
+                 text-transform:uppercase; color:var(--gold); margin:0 0 16px; }
+  .brand { font-family:'Fraunces',Georgia,serif; font-weight:600; font-size:19px; color:var(--ink); }
+  h1 { font-family:'Fraunces',Georgia,serif; font-weight:500; color:var(--ink);
+       font-size:clamp(31px,5vw,46px); line-height:1.08; letter-spacing:-.5px; text-wrap:balance; margin:14px 0 16px; }
+  .lede { font-size:18.5px; line-height:1.55; color:var(--mut); max-width:66ch; margin:0; }
+  .meta { display:flex; flex-wrap:wrap; gap:8px 22px; font-size:12.5px; color:var(--faint);
+          margin-top:22px; padding-top:18px; border-top:1px solid var(--line); }
+  .meta b { color:var(--body); font-weight:500; }
+
+  section { margin-top:52px; scroll-margin-top:16px; }
+  .eyebrow { font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:2.5px;
+             text-transform:uppercase; color:var(--blue); margin:0 0 10px; }
+  h2 { font-family:'Fraunces',Georgia,serif; font-weight:500; color:var(--ink); font-size:28px;
+       line-height:1.18; letter-spacing:-.2px; text-wrap:balance; margin:0 0 14px; }
+  h3 { font-size:16.5px; font-weight:600; color:var(--ink); margin:22px 0 8px; }
+  p { margin:0 0 14px; max-width:70ch; } strong { color:var(--ink); font-weight:600; } a { color:var(--blue); }
+  ul { max-width:70ch; padding-left:20px; } li { margin:6px 0; }
+
+  .callout { border:1px solid var(--goldLine); background:var(--goldSoft); border-radius:10px;
+             padding:16px 20px; margin:18px 0; font-size:14.5px; }
+  .callout b { color:var(--ink); }
+  .note { border-left:3px solid var(--blue); background:var(--sunk); border-radius:0 8px 8px 0;
+          padding:12px 16px; margin:16px 0; font-size:14px; }
+
+  .stats { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin:22px 0 4px; }
+  @media (max-width:720px){ .stats { grid-template-columns:repeat(2,1fr); } }
+  .stat { background:var(--card); border:1px solid var(--line); border-radius:11px; padding:16px 16px; box-shadow:var(--shadow); }
+  .stat .fig { font-family:'Fraunces',serif; font-weight:600; font-size:17px; color:var(--ink); line-height:1.15; }
+  .stat .lab { font-size:12px; color:var(--mut); margin-top:7px; line-height:1.45; }
+
+  .tier { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:20px 22px;
+          box-shadow:var(--shadow); margin:14px 0; }
+  .tier .th { display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; margin-bottom:4px; }
+  .tier .tt { font-family:'Fraunces',serif; font-size:18px; font-weight:600; color:var(--ink); }
+  .tier .badge { font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:1.5px; text-transform:uppercase;
+                 padding:2px 9px; border-radius:20px; border:1px solid; }
+  .b-threat { color:var(--red); border-color:var(--red); background:var(--redSoft); }
+  .b-adj { color:var(--mut); border-color:var(--line); }
+  .b-incumbent { color:var(--gold); border-color:var(--goldLine); background:var(--goldSoft); }
+  .tier p { font-size:14px; margin:8px 0 0; }
+  .tier .who { font-size:13px; color:var(--mut); margin-top:8px; }
+  .tier .who b { color:var(--ink); }
+
+  table { width:100%; border-collapse:collapse; margin:16px 0; font-size:13px; display:block; overflow-x:auto; }
+  th, td { text-align:left; padding:9px 11px; border-bottom:1px solid var(--line2); vertical-align:top; }
+  th { font-size:10px; letter-spacing:.8px; text-transform:uppercase; color:var(--faint); font-weight:600; white-space:nowrap; }
+  td strong { color:var(--ink); }
+  tbody tr:last-child td { border-bottom:none; }
+  .yes { color:var(--green); font-weight:600; } .no { color:var(--red); font-weight:600; }
+  .part { color:var(--gold); font-weight:600; }
+  .matrix td:first-child, .matrix th:first-child { position:sticky; left:0; background:var(--card); }
+  .matrix th { background:var(--bg); }
+  .matrix td { text-align:center; } .matrix td:first-child { text-align:left; }
+  .attestrow td { background:var(--blueSoft); }
+
+  ol.plan { counter-reset:p; list-style:none; padding:0; margin:18px 0 0; }
+  ol.plan li { counter-increment:p; position:relative; padding:0 0 20px 48px; }
+  ol.plan li:before { content:counter(p); position:absolute; left:0; top:-2px; width:32px; height:32px;
+        border-radius:50%; background:var(--blueSoft); color:var(--blue); border:1px solid var(--blueLine);
+        font-family:'IBM Plex Mono',monospace; font-weight:500; display:flex; align-items:center; justify-content:center; }
+  ol.plan .pt { font-weight:600; color:var(--ink); display:block; margin-bottom:3px; font-size:15.5px; }
+  ol.plan .pd { font-size:14px; color:var(--mut); }
+
+  .srcs { font-size:12px; color:var(--mut); columns:2; column-gap:26px; } .srcs a { word-break:break-all; }
+  @media (max-width:640px){ .srcs { columns:1; } }
+  footer { max-width:900px; margin:52px auto 0; padding:24px 24px 0; border-top:1px solid var(--line);
+           font-size:12px; color:var(--faint); line-height:1.55; }
+</style>
+
+<header class="top">
+  <p class="doc-eyebrow">Market &amp; competitive research · September 2026</p>
+  <div class="brand">Attest</div>
+  <h1>The competitive landscape, and where Attest can actually win</h1>
+  <p class="lede">A researched map of who is building tamper-evident AI audit and AI-compliance
+    tooling — globally and in the UAE — how each compares to Attest, and a candid assessment of
+    which of our advantages are real moats versus fast-eroding table stakes.</p>
+  <div class="meta">
+    <span><b>Method</b> Four parallel web-research passes, sourced &amp; dated</span>
+    <span><b>As of</b> 2026-09-05</span>
+    <span><b>Confidence</b> High on structure; verify individual figures</span>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <section id="tldr">
+    <div class="callout"><b>The one thing to take away.</b> Attest's cryptography is no longer a
+      differentiator — RFC-3161 anchoring, Ed25519 signing, hash-chains and Merkle proofs are now
+      open-source, standardised (IETF SCITT), and appearing on a dozen 2025–26 landing pages. But
+      the <em>combination</em> Attest ships — an inline compliance gate <em>and</em> an
+      externally-anchored, independently-verifiable record <em>and</em> customer-held-key content
+      encryption, aimed at <em>UAE regulated finance</em> — was found nowhere else. The moat is not
+      the hash chain. It is the bundle, the insider-proof trust model, and the jurisdiction.</div>
+  </section>
+
+  <section id="drivers">
+    <p class="eyebrow">01 · Demand engine</p>
+    <h2>The regulation creating the need is real and dated</h2>
+    <p>Three converging regimes turn "provable AI records" from a nice-to-have into a compliance
+      obligation. Two are UAE-specific and live <em>now</em>; one is the global bar-setter.</p>
+    <div class="stats">
+      <div class="stat"><div class="fig">DIFC Reg&nbsp;10</div><div class="lab">Full enforcement from <b>1 Jan 2026</b>: AI registers, accountability, document-before-processing, Autonomous Systems Officer. The world's first AI-specific data regulation.</div></div>
+      <div class="stat"><div class="fig">CBUAE AI/ML</div><div class="lab">Guidance (<b>Feb 2026</b>): model inventory, continuous monitoring, human oversight, Board accountability — <b>no third-party/vendor carve-out</b>.</div></div>
+      <div class="stat"><div class="fig">DFSA records</div><div class="lab">Baseline: retain <b>≥6 years</b>, reproducible in English within 3 days. A natural home for a tamper-evident ledger.</div></div>
+      <div class="stat"><div class="fig">EU AI Act Art.&nbsp;12</div><div class="lab">Enforceable <b>2 Aug 2026</b>: automatic, tamper-evident, traceable logs for high-risk AI — read by commentators as needing independent qualified timestamps.</div></div>
+    </div>
+    <div class="note"><strong>The honest catch:</strong> no UAE instrument yet <em>mandates
+      cryptographic tamper-evidence or external anchoring specifically</em>. The rules require
+      records that are accountable, retained and reproducible — which ordinary (mutable) GRC logging
+      can nominally satisfy. Attest sells a "provable / insider-proof" upgrade <em>ahead of</em> the
+      letter of the rules. That is both the opportunity (be there first) and the core sales
+      challenge (teach why immutable-and-anchored beats good-enough logging before a regulator or an
+      incident forces it).</div>
+  </section>
+
+  <section id="map">
+    <p class="eyebrow">02 · The field</p>
+    <h2>Who is building what</h2>
+    <p>The market splits into camps that each own <em>one</em> of Attest's pillars. Almost nobody
+      owns two; nobody found owns all of them.</p>
+
+    <div class="tier">
+      <div class="th"><span class="tt">Direct crypto-audit micro-cluster</span><span class="badge b-threat">Head-to-head</span></div>
+      <p>The real frontier competition, and the biggest surprise of this research: a cluster of
+        2025–26 entrants shipping almost exactly Attest's architecture (Ed25519 + hash-chain +
+        Merkle + RFC-3161 anchor + offline verify).</p>
+      <div class="who"><b>Attested Intelligence (AGA)</b> — nearly feature-identical, aimed at AI-agent
+        governance, npm-installable, open verifier. <b>VeritasChain (VCP)</b> — same primitives, filed
+        an IETF SCITT profile, trading/Japan focus. <b>Senthex</b> — firewall + anchored audit +
+        <em>post-quantum</em> signing (matches our algorithm-ID foresight). <b>DeepInspect</b> (Dec 2025) —
+        inline gate + tamper-evident store, but HMAC (symmetric, <em>not</em> independently verifiable),
+        CISO market. Plus <b>Soma, NexArt, SteelSpine, Vaara, KYDE, wirken</b> (mostly open-source /
+        pre-seed, scale unproven).</div>
+    </div>
+
+    <div class="tier">
+      <div class="th"><span class="tt">"System of record" archiving incumbents</span><span class="badge b-threat">Messaging collision</span></div>
+      <p>They already own the words "tamper-evident system of record" for regulated finance — via
+        <em>WORM storage + vendor-attested integrity checks</em>. Crucially: that still requires
+        trusting the vendor, gives no portable third-party proof, and does not defend against a
+        compromised vendor. And none of them gates AI output.</p>
+      <div class="who"><b>Global Relay</b>, <b>Smarsh</b> (WORM, SEC 17a-4), <b>Behavox</b>,
+        <b>Theta Lake</b> (leaning hardest into "AI communications governance"), <b>Shield</b>,
+        <b>Relativity</b>. The most important narrative battle Attest must win: <b>WORM ≠
+        externally-anchored, independently-verifiable, insider-proof.</b></div>
+    </div>
+
+    <div class="tier">
+      <div class="th"><span class="tt">FS RegTech — AI-output compliance</span><span class="badge b-threat">Direct (positioning)</span></div>
+      <p>These check AI / comms <em>content</em> against regulatory rules — Attest's gate half — but
+        their record layer is an ordinary, mutable audit log.</p>
+      <div class="who"><b>Norm Ai</b> — best-funded by far (~$267M raised, ~$1.2B val, &gt;$30T AUM
+        client base); encodes regs as decision trees, supervises other AI systems' outputs. <b>Sedric</b>
+        — real-time comms/marketing compliance. <b>Saifr</b> (Fidelity) — FS marketing-compliance
+        review, shipping into Microsoft Azure AI Foundry. None claims cryptographic tamper-evidence.</div>
+    </div>
+
+    <div class="tier">
+      <div class="th"><span class="tt">Real-time guardrails / AI security</span><span class="badge b-adj">Gate only</span></div>
+      <p>Genuine inline output blocking — but no anchored record; it's AI <em>security</em>, not
+        audit provenance.</p>
+      <div class="who"><b>Arthur (Shield)</b> — "firewall for LLMs". <b>Cisco AI Defense</b> (ex-Robust
+        Intelligence, ~$400M acq). <b>Azure AI Content Safety</b>, <b>Fiddler</b> ($100M raised).</div>
+    </div>
+
+    <div class="tier">
+      <div class="th"><span class="tt">Enterprise AI-governance platforms</span><span class="badge b-incumbent">Budget incumbents</span></div>
+      <p>Sell governance <em>workflow + documentation</em>. Their "immutable audit log" is a
+        database/retention claim, not crypto-grade. They own the C-suite "responsible AI" budget
+        line Attest must not get lost inside.</p>
+      <div class="who"><b>IBM watsonx.governance</b> — the UAE incumbent to beat (live deployment at
+        telco <b>e&amp;</b>, deep MENA/FS relationships). <b>Credo AI</b> (~$41M) — markets an "immutable
+        audit log" that is DB-grade. <b>OneTrust, Collibra, ServiceNow, Modulos, Trustible, ModelOp</b>,
+        and <b>Monitaur</b> — the one incumbent that <em>may</em> do cryptographically-signed decision
+        logs (unverified on its own site) and whose FS/insurance buyer overlaps Attest most.</div>
+    </div>
+
+    <div class="tier">
+      <div class="th"><span class="tt">Adjacent — not competitors</span><span class="badge b-adj">Different problem</span></div>
+      <p><b>Financial-crime / onboarding</b>: Bretton (ex-Greenlite, ~$90M), Parcha, Hummingbird,
+        ComplyAdvantage — KYC/AML, not output audit. <b>Legal AI</b>: Harvey, Luminance. <b>Media
+        provenance</b>: C2PA / Content Credentials, Truepic — authenticity of <em>media</em>, not
+        AI-<em>action</em> audit (watch C2PA's new text/LLM manifests as scope-creep).</p>
+    </div>
+  </section>
+
+  <section id="matrix">
+    <p class="eyebrow">03 · The white space</p>
+    <h2>The five-pillar test nobody else passes</h2>
+    <p>Score the serious players on the five things Attest does together. The pattern is stark:
+      everyone owns a column or two; the intersection is empty but for Attest.</p>
+    <table class="matrix">
+      <thead><tr>
+        <th>Capability →</th>
+        <th>External<br>anchor (offline,<br>vendor-independent)</th>
+        <th>Asymmetric<br>sign + chain<br>+ Merkle</th>
+        <th>Customer-key<br>content<br>encryption</th>
+        <th>Real-time<br>output gate<br>+ fix</th>
+        <th>FS + UAE<br>go-to-market</th>
+      </tr></thead>
+      <tbody>
+        <tr class="attestrow"><td><strong>Attest</strong></td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+        <tr><td>Attested Intelligence / VeritasChain</td><td class="yes">✓</td><td class="yes">✓</td><td class="no">✗</td><td class="part">~</td><td class="no">✗</td></tr>
+        <tr><td>Senthex</td><td class="yes">✓</td><td class="yes">✓</td><td class="no">✗</td><td class="yes">✓</td><td class="no">✗</td></tr>
+        <tr><td>DeepInspect</td><td class="no">✗ (HMAC)</td><td class="part">~</td><td class="no">✗</td><td class="yes">✓</td><td class="no">✗</td></tr>
+        <tr><td>Norm Ai</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="yes">✓</td><td class="part">~</td></tr>
+        <tr><td>Global Relay / Smarsh</td><td class="no">✗ (WORM)</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="yes">✓</td></tr>
+        <tr><td>Arthur / Cisco / Azure</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="yes">✓</td><td class="part">~</td></tr>
+        <tr><td>IBM watsonx.governance</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="part">~</td><td class="yes">✓</td></tr>
+        <tr><td>Credo AI (+ G42 in UAE)</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="yes">✓</td></tr>
+        <tr><td>Monitaur</td><td class="no">✗</td><td class="part">~ (unverified)</td><td class="no">✗</td><td class="no">✗</td><td class="part">~ (US FS)</td></tr>
+      </tbody>
+    </table>
+    <p style="font-size:12.5px;color:var(--faint);"><span class="yes">✓</span> present ·
+      <span class="part">~</span> partial / unverified · <span class="no">✗</span> absent.
+      Two columns almost nobody else populates: <strong>customer-key content encryption</strong>
+      (found in no competitor) and the <strong>gate + anchored-record combination in one product</strong>
+      (only tiny Senthex attempts both).</p>
+  </section>
+
+  <section id="moat">
+    <p class="eyebrow">04 · Honest moat assessment</p>
+    <h2>What is defensible, and what is not</h2>
+    <h3>Table stakes — stop pitching these as differentiation</h3>
+    <p>The cryptographic pipeline itself: hash-chaining, Merkle proofs, Ed25519 signing, RFC-3161
+      anchoring, offline verification, post-quantum algorithm-agility. All are standardised
+      (SCITT is now an IETF standard with a Microsoft GA implementation), open-source (Sigstore
+      Rekor v2 is ~90% of the backend), and independently reproduced by multiple 2025–26 entrants.
+      A competent two-engineer team can stand up the primitives from public reference code.</p>
+    <h3>Genuinely defensible — concentrate here</h3>
+    <ul>
+      <li><strong>Insider-proof trust model as the product.</strong> Customer-held-key encryption
+        (content dark even to Attest) <em>plus</em> external anchoring (history unforgeable even by
+        Attest) is a trust story WORM (Global Relay/Smarsh), HMAC (DeepInspect) and vendor-controlled
+        ledgers (Azure) structurally cannot tell. No competitor found pairs customer-key encryption
+        with anchored audit.</li>
+      <li><strong>The bundle: gate + anchored record in one product.</strong> The market is split —
+        audit vendors don't gate, guardrail vendors don't anchor. Owning both is rare.</li>
+      <li><strong>UAE regulatory localisation.</strong> A UAE-qualified/eIDAS TSA anchor
+        (our swappable <span class="mono">ANCHOR_TSA_URL</span>) plus DFSA/FSRA/CBUAE rule packs and
+        regulator-legible evidence export. No named competitor is UAE-focused; the local field is
+        advisory/GRC consultancies (MindXO, reconn) and ISO-42001 SaaS, not an evidence layer.</li>
+      <li><strong>Trust / certification go-to-market.</strong> Being the vendor a UAE regulator
+        accepts — the break-and-detect tamper test as a live sales artifact, a design-partner logo,
+        sandbox pedigree. This is a relationship moat, not a technical one.</li>
+    </ul>
+  </section>
+
+  <section id="risks">
+    <p class="eyebrow">05 · Strategic risks</p>
+    <h2>What could go wrong</h2>
+    <ul>
+      <li><strong>Messaging collision with the archivers.</strong> Global Relay and Smarsh already
+        say "tamper-evident system of record." If Attest can't crisply teach WORM ≠ externally-anchored,
+        it sounds like a smaller version of an incumbent. This is the #1 narrative battle.</li>
+      <li><strong>Fast-follower from the well-funded.</strong> Norm Ai ($267M) could bolt a
+        cryptographic record onto its policy engine; DeepInspect could swap HMAC for asymmetric +
+        anchoring and enter FS; Monitaur (if its signed-log claim is real) could add anchoring.</li>
+      <li><strong>Hyperscaler commoditisation.</strong> Microsoft ships SCITT-compliant signing
+        transparency (GA) and is adding offline Ed25519 receipts to its agent-governance toolkit —
+        potentially bundled into Azure for free. Attest must not be "a hash chain you pay for."</li>
+      <li><strong>Selling ahead of the rules.</strong> Until a regulator or an incident forces the
+        bar, buyers may accept ordinary GRC logging as "good enough."</li>
+      <li><strong>Mindshare capture: G42 × Credo AI.</strong> A sovereign-scale partner backing a
+        global governance platform could own the regional "responsible AI" budget and boardroom —
+        adjacent, not feature-for-feature, but a gorilla to route around (or partner with).</li>
+      <li><strong>Category standardisation.</strong> A bespoke chain format becomes a liability once
+        SCITT wins; VeritasChain already filed a SCITT profile.</li>
+    </ul>
+  </section>
+
+  <section id="plan">
+    <p class="eyebrow">06 · What to do about it</p>
+    <h2>Positioning plan — realistic moves</h2>
+    <ol class="plan">
+      <li><span class="pt">Re-anchor the pitch away from the hash chain.</span><span class="pd">Lead
+        with the two things rivals lack: "content we cannot read, history we cannot forge — proven
+        to your regulator without trusting us," for UAE regulated finance. The crypto is how, not why.</span></li>
+      <li><span class="pt">Win the WORM-vs-anchored argument explicitly.</span><span class="pd">Put a
+        one-page "why immutable storage isn't proof" explainer in the sales kit; make the
+        break-and-detect tamper test a live demo. This directly neutralises Global Relay/Smarsh.</span></li>
+      <li><span class="pt">Adopt SCITT interoperability, don't reinvent.</span><span class="pd">Profile
+        SCITT rather than ship a proprietary chain format — "SCITT-compatible, UAE-anchored,
+        insider-proof, confidential content" is more defensible than "we built a hash chain," and
+        de-risks the standardisation wave.</span></li>
+      <li><span class="pt">Make UAE the moat.</span><span class="pd">Wire the anchor to a
+        UAE-qualified/eIDAS TSA; build DFSA/FSRA/CBUAE rule packs; map evidence export to Reg 10
+        registers and the CBUAE model-inventory/monitoring obligations. Enter via the DIFC Innovation
+        Hub / Dubai AI Campus / FinTech Hive; use ADGM RegLab / Hub71 as the Abu Dhabi second front.</span></li>
+      <li><span class="pt">Partner the governance layer, don't fight it.</span><span class="pd">Be the
+        verifiable <em>evidence layer</em> that Credo/IBM/Big-4/ISO-42001 GRC tools sit on top of.
+        "They document; we prove." Turn potential budget-competitors into channels.</span></li>
+      <li><span class="pt">Own the customer-key story loudly.</span><span class="pd">It's the single
+        rarest capability found and it maps exactly to the CLAUDE.md threat model (insiders on both
+        sides). Make "even we can't read it, even we can't forge it" the headline for CISO/GC buyers.</span></li>
+      <li><span class="pt">Land reference design-partners fast.</span><span class="pd">A named
+        DIFC-regulated firm that vouches for the evidence bundle is worth more than its contract —
+        before the fast-followers and the hyperscaler bundle arrive.</span></li>
+      <li><span class="pt">Keep a live watch list.</span><span class="pd">Senthex, DeepInspect,
+        Attested Intelligence, VeritasChain (nearest architecture); Norm Ai (nearest positioning +
+        capital); IBM watsonx.governance and G42×Credo (UAE incumbency); Monitaur (could move onto
+        our turf). Re-scan quarterly — this category went from empty to crowded in ~12 months.</span></li>
+    </ol>
+  </section>
+
+  <section id="verify">
+    <p class="eyebrow">07 · Before you quote any of this</p>
+    <h2>Verification to-dos &amp; method notes</h2>
+    <p>This report is built from four parallel web-research passes. The org's network proxy blocked
+      direct page fetches for many domains, so a share of the detail rests on search-result
+      summaries — cited and dated, but worth confirming against primary sources before external use.
+      Specifically flagged as needing a primary-source check:</p>
+    <ul>
+      <li><strong>Monitaur's "cryptographic / tamper-evident logs"</strong> — claimed by secondary
+        sources, not confirmed on its own site. If real, it's the incumbent most able to move onto
+        Attest's turf.</li>
+      <li><strong>Holistic AI funding</strong> — ignore the "$300M+" figures; those conflate it with
+        the unrelated Paris LLM lab "H". It's a much smaller Series-B governance company.</li>
+      <li><strong>WhyLabs → Apple acquisition</strong> and several exact <strong>funding round sizes
+        / dates</strong> (Norm Ai, CBUAE guidance date ~23 Feb 2026, G42×Credo ~20 Feb 2026) —
+        secondary-sourced.</li>
+      <li><strong>"Delphi"</strong> — could not be resolved to a real FS-compliance product; confirm
+        which company was meant, or drop it.</li>
+      <li><strong>No UAE-specific codified tamper-evident-logging mandate was found</strong> — the
+        UAE thesis rests on Reg 10 / CBUAE / DFSA record-keeping, not a crypto-log rule. Keep the
+        pitch honest on that.</li>
+    </ul>
+  </section>
+
+  <section id="sources">
+    <p class="eyebrow">Sources</p>
+    <h2>Selected references</h2>
+    <div class="srcs">
+      <p>EU AI Act Art. 12 — helpnetsecurity.com/2026/04/16/eu-ai-act-logging-requirements/ ; isms.online/iso-42001/eu-ai-act/article-12/<br>
+      IETF SCITT — scitt.io ; datatracker.ietf.org/doc/draft-ietf-scitt-architecture/<br>
+      Microsoft Signing Transparency (GA) — techcommunity.microsoft.com/blog/microsoft-security-blog/…/4528369<br>
+      Sigstore Rekor v2 — docs.sigstore.dev/logging/overview/<br>
+      Amazon QLDB retirement — infoq.com/news/2024/07/aws-kill-qldb/<br>
+      Attested Intelligence AGA — attestedintelligence.com<br>
+      VeritasChain VCP — businesswire.com/news/home/20251126171479/en ; datatracker.ietf.org/doc/draft-kamimura-scitt-vcp/<br>
+      Senthex — senthex.com ; Soma — github.com/radotsvetkov/soma ; NexArt — nexart.io ; SteelSpine — steelspine.ai<br>
+      DeepInspect — deepinspect.ai/architecture , /forensics , /blog/ai-audit-log-hashing-patterns<br>
+      Norm Ai — norm.ai/platform ; enterprisedna.co/…/norm-ai-120m-series-c… ; baincapitalventures.com/insight/norm-ai…<br>
+      Sedric — sedric.ai ; Saifr — saifr.ai/about ; prnewswire…saifr-collaborates-with-microsoft…<br>
+      Global Relay — globalrelay.com/solutions/recordkeeping-compliance/ ; Smarsh — smarsh.com/archive/<br>
+      Theta Lake — thetalake.com ; Behavox — behavox.com ; Shield — shieldfc.com<br>
+      IBM watsonx.governance — ibm.com/products/watsonx-governance ; biztechmagazine.com/…/watsonx-…-financial-institutions<br>
+      Credo AI — credo.ai/glossary/credo-ai-audit-trail ; businesswire.com/news/home/20240730411517/en/<br>
+      Monitaur — monitaur.ai/platform ; druce.ai/governance/wiki/vendors/monitaur (secondary)<br>
+      Arthur Shield — arthur.ai/blog/announcing-arthur-shield… ; Cisco/Robust Intelligence — blogs.cisco.com/news/…<br>
+      OneTrust — onetrust.com/solutions/ai-governance/ ; Collibra — collibra.com/products/ai-governance ; ModelOp — modelop.com<br>
+      DIFC Regulation 10 — difc.com/business/registrars-and-commissioners/commissioner-of-data-protection/regulation-10 ; mayerbrown.com/…/ai-regulation-in-the-difc…<br>
+      CBUAE AI/ML guidance — rulebook.centralbank.ae/…/guidance-note-…-artificial-intelligence ; pinsentmasons.com/out-law/news/uae-central-bank-responsible-ai-guidance…<br>
+      DFSA record-keeping — dfsaen.thomsonreuters.com/rulebook/retention-records<br>
+      UAE PDPL — securiti.ai/uae-personal-data-protection-law/ ; National AI Strategy 2031 — uaecabinet.ae ; UAE AI Charter — u.ae<br>
+      G42 × Credo AI — thenationalnews.com/future/technology/2026/02/20/… ; businesswire.com/news/home/20260220104426/en<br>
+      Ecosystem — difc.com (Dubai AI Campus, AI-native financial centre) ; dfsa.ae/innovation ; adgm.com/setting-up/fintech ; hub71.com<br>
+      Local players — verifywise.ai (MindXO) ; reconn.io/pages/iso-42001-implementation-services ; sgs.com (ISO 42001 GCC)</p>
+    </div>
+  </section>
+
+  <footer>
+    Prepared for Attest from four parallel web-research passes (2026-09-05). Findings are sourced
+    and dated; several rest on search-result summaries because the environment's network proxy
+    blocked direct page fetches — treat individual funding figures, dates, and single-source
+    capability claims as provisional until confirmed against primary sources (see §07). This is
+    market intelligence, not legal or investment advice.
+  </footer>
+</div>
