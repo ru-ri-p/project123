@@ -1,0 +1,368 @@
+<title>Attest Client Guide</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root {
+    --bg:#eef1f4; --card:#ffffff; --sunk:#f5f7f9;
+    --line:#dbe0e7; --line2:#e7ebef;
+    --ink:#16202e; --body:#3a4453; --mut:#5a6779; --faint:#8b95a3;
+    --blue:#1568d4; --blueSoft:rgba(21,104,212,.09); --blueLine:#b9d5f5;
+    --green:#20713a; --greenSoft:rgba(32,113,58,.10);
+    --amber:#8a6410; --amberSoft:rgba(201,160,74,.16); --amberLine:#d8b25f;
+    --red:#b03a2e; --redSoft:rgba(176,58,46,.09); --redLine:#d29088;
+    --shadow:0 1px 2px rgba(22,32,46,.05), 0 8px 24px -18px rgba(22,32,46,.25);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg:#0e141c; --card:#161e28; --sunk:#111821;
+      --line:#273240; --line2:#1f2833;
+      --ink:#eef2f6; --body:#c2ccd8; --mut:#93a0b0; --faint:#6b7888;
+      --blue:#63a4f0; --blueSoft:rgba(99,164,240,.12); --blueLine:#2f4d6e;
+      --green:#5fbf80; --greenSoft:rgba(95,191,128,.13);
+      --amber:#d7b264; --amberSoft:rgba(215,178,100,.14); --amberLine:#5c4a24;
+      --red:#e0897d; --redSoft:rgba(224,137,125,.12); --redLine:#5e332d;
+      --shadow:0 1px 2px rgba(0,0,0,.3), 0 10px 30px -20px rgba(0,0,0,.6);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg:#0e141c; --card:#161e28; --sunk:#111821;
+    --line:#273240; --line2:#1f2833;
+    --ink:#eef2f6; --body:#c2ccd8; --mut:#93a0b0; --faint:#6b7888;
+    --blue:#63a4f0; --blueSoft:rgba(99,164,240,.12); --blueLine:#2f4d6e;
+    --green:#5fbf80; --greenSoft:rgba(95,191,128,.13);
+    --amber:#d7b264; --amberSoft:rgba(215,178,100,.14); --amberLine:#5c4a24;
+    --red:#e0897d; --redSoft:rgba(224,137,125,.12); --redLine:#5e332d;
+    --shadow:0 1px 2px rgba(0,0,0,.3), 0 10px 30px -20px rgba(0,0,0,.6);
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--body);
+         font:16px/1.6 'IBM Plex Sans',-apple-system,'Segoe UI',sans-serif;
+         -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:820px; margin:0 auto; padding:0 24px 100px; }
+  .mono { font-family:'IBM Plex Mono',ui-monospace,monospace; }
+
+  header.top { max-width:820px; margin:0 auto; padding:56px 24px 30px; }
+  .brandrow { display:flex; align-items:baseline; gap:12px; }
+  .brand { font-family:'Fraunces',Georgia,serif; font-weight:600; font-size:26px;
+           color:var(--ink); letter-spacing:.3px; }
+  .brand-tag { font-family:'Fraunces',serif; font-size:10.5px; letter-spacing:3px;
+               color:var(--mut); text-transform:uppercase; }
+  h1 { font-family:'Fraunces',Georgia,serif; font-weight:500; color:var(--ink);
+       font-size:clamp(30px,5vw,42px); line-height:1.12; letter-spacing:-.4px;
+       text-wrap:balance; margin:26px 0 14px; }
+  .lede { font-size:18px; line-height:1.55; color:var(--mut); max-width:62ch; margin:0; }
+  .metaline { margin-top:24px; padding-top:18px; border-top:1px solid var(--line);
+              display:flex; flex-wrap:wrap; gap:8px 20px; font-size:12.5px; color:var(--faint); }
+  .metaline b { color:var(--body); font-weight:500; }
+
+  section { margin-top:52px; }
+  .eyebrow { font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:2.5px;
+             text-transform:uppercase; color:var(--blue); margin:0 0 10px; }
+  h2 { font-family:'Fraunces',Georgia,serif; font-weight:500; color:var(--ink);
+       font-size:27px; line-height:1.2; letter-spacing:-.2px; margin:0 0 12px; text-wrap:balance; }
+  h3 { font-size:16px; font-weight:600; color:var(--ink); margin:26px 0 8px; }
+  p { margin:0 0 14px; max-width:64ch; }
+  a { color:var(--blue); }
+  strong { color:var(--ink); font-weight:600; }
+
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px;
+          padding:26px 28px; box-shadow:var(--shadow); }
+  .card + .card { margin-top:16px; }
+
+  /* the "in practice" example box — the throughline of the guide */
+  .practice { background:var(--sunk); border:1px solid var(--line2);
+              border-left:3px solid var(--blue); border-radius:0 8px 8px 0;
+              padding:16px 20px; margin:18px 0 4px; }
+  .practice .lab { font-family:'IBM Plex Mono',monospace; font-size:10.5px;
+                   letter-spacing:2px; text-transform:uppercase; color:var(--blue); }
+  .practice p { margin:6px 0 0; font-size:14.5px; color:var(--body); }
+  .practice p:last-child { margin-bottom:0; }
+
+  pre { background:var(--sunk); border:1px solid var(--line2); border-radius:8px;
+        padding:15px 17px; overflow-x:auto; margin:14px 0;
+        font-family:'IBM Plex Mono',monospace; font-size:13px; line-height:1.62; color:var(--ink); }
+  pre .c { color:var(--faint); }  /* comment */
+  pre .k { color:var(--blue); }   /* keyword-ish */
+  code:not(pre code) { font-family:'IBM Plex Mono',monospace; font-size:.88em;
+        background:var(--blueSoft); color:var(--ink); padding:1px 6px; border-radius:4px; }
+
+  /* tier scale */
+  .tiers { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin:18px 0 4px; }
+  .tier { border:1px solid var(--line); border-radius:9px; padding:14px 15px; background:var(--card); }
+  .tier .dot { width:9px; height:9px; border-radius:50%; display:inline-block; margin-right:7px; }
+  .tier .name { font-weight:600; color:var(--ink); font-size:13.5px; }
+  .tier .desc { font-size:12.5px; color:var(--mut); margin-top:5px; line-height:1.45; }
+  .t-green .dot{background:var(--green);} .t-yellow .dot{background:var(--amberLine);}
+  .t-orange .dot{background:var(--amber);} .t-red .dot{background:var(--red);}
+
+  .steps { list-style:none; counter-reset:s; padding:0; margin:16px 0 0; }
+  .steps li { counter-increment:s; position:relative; padding:0 0 16px 42px; }
+  .steps li:before { content:counter(s); position:absolute; left:0; top:-2px;
+        width:28px; height:28px; border-radius:50%; background:var(--blueSoft);
+        color:var(--blue); font-family:'IBM Plex Mono',monospace; font-size:13px; font-weight:500;
+        display:flex; align-items:center; justify-content:center; border:1px solid var(--blueLine); }
+  .steps li:last-child { padding-bottom:0; }
+  .steps .st { font-weight:600; color:var(--ink); display:block; margin-bottom:2px; }
+  .steps .sd { font-size:14px; color:var(--mut); }
+
+  .callout { border:1px solid var(--amberLine); background:var(--amberSoft);
+             border-radius:9px; padding:15px 18px; margin:18px 0 4px; font-size:14px; color:var(--body); }
+  .callout b { color:var(--ink); }
+
+  .toc { display:flex; flex-wrap:wrap; gap:8px; margin-top:22px; }
+  .toc a { font-size:12.5px; text-decoration:none; color:var(--body);
+           border:1px solid var(--line); border-radius:20px; padding:5px 13px; background:var(--card); }
+  .toc a:hover { border-color:var(--blueLine); color:var(--blue); }
+
+  footer { max-width:820px; margin:60px auto 0; padding:26px 24px 0; border-top:1px solid var(--line);
+           font-size:13px; color:var(--faint); }
+  hr.soft { border:none; border-top:1px solid var(--line); margin:0; }
+</style>
+
+<header class="top">
+  <div class="brandrow">
+    <span class="brand">Attest</span>
+    <span class="brand-tag">AI Audit &amp; Compliance</span>
+  </div>
+  <h1>Everything Attest does, and how you'd use it</h1>
+  <p class="lede">A feature-by-feature guide for the compliance officers and engineers
+    who run Attest day to day. Each section explains what a feature is, why it matters,
+    and shows it working on a real case from a fintech market-intelligence desk.</p>
+  <div class="metaline">
+    <span><b>Audience</b> Compliance &amp; engineering</span>
+    <span><b>Reading time</b> ~12 minutes</span>
+    <span><b>Worked example</b> A DIFC market-intelligence platform</span>
+  </div>
+  <nav class="toc">
+    <a href="#gate">The gate</a>
+    <a href="#tiers">Risk tiers</a>
+    <a href="#fixes">Fixes &amp; rewrites</a>
+    <a href="#auto">Auto vs human</a>
+    <a href="#queue">Work queue</a>
+    <a href="#record">The record</a>
+    <a href="#privacy">Customer-key privacy</a>
+    <a href="#access">Logins &amp; roles</a>
+  </nav>
+</header>
+
+<div class="wrap">
+
+  <section id="what">
+    <div class="card">
+      <p style="margin-bottom:0;font-size:16.5px;"><strong>The one idea.</strong> Every AI
+      output your product generates passes through a single check before a user sees it. Attest
+      judges it against your own policy and the rulebooks that apply to you, records both the
+      decision and the output as a signed, tamper-evident event, and hands your code a verdict.
+      When something is wrong, Attest also proposes the fix — and, when you allow it, applies it.
+      The promise a regulator hears: <em>“we flagged it, here is the fix, here is proof the fix
+      shipped, and nobody can doctor that history.”</em></p>
+    </div>
+  </section>
+
+  <section id="gate">
+    <p class="eyebrow">01 — The gate</p>
+    <h2>One call, before the output ships</h2>
+    <p>The whole integration is a single function. After your model produces something, you
+      pass it to <code>gate()</code>. Attest evaluates and records it, then returns a verdict your
+      code reads and acts on. Attest never changes your application's behaviour on its own — you
+      decide what to do with the verdict.</p>
+    <pre><span class="c"># after your model produces a market brief, before a user sees it</span>
+result = attest.gate({"output": brief_text})
+
+if result.blocked:
+    serve("This response is being reviewed before release.")
+else:
+    serve(brief_text)</pre>
+    <div class="practice">
+      <span class="lab">In practice</span>
+      <p>Your morning-brief generator drafts a note on gold ahead of the Fed minutes. One
+      <code>gate()</code> call later you know whether it's clean, needs a look, or must be held —
+      and either way there's now a signed record that the check happened, before any client
+      opened the app.</p>
+    </div>
+  </section>
+
+  <section id="tiers">
+    <p class="eyebrow">02 — Risk tiers</p>
+    <h2>Four levels, and only your policy can block</h2>
+    <p>Every verdict lands on a four-colour scale. The tier drives what your code does and where
+      the item shows up for a human. A crucial rule: the jurisdiction rulebooks Attest publishes are
+      <strong>advisory</strong> — they can raise the tier and cite their instrument, but only
+      <strong>your own policy</strong> can actually block an action. Nothing Attest hasn't had
+      reviewed can stop your business.</p>
+    <div class="tiers">
+      <div class="tier t-green"><span class="dot"></span><span class="name">Green</span>
+        <div class="desc">Clean. Recorded and served, nothing raised.</div></div>
+      <div class="tier t-yellow"><span class="dot"></span><span class="name">Yellow</span>
+        <div class="desc">Minor. Noted; usually served, often auto-fixable.</div></div>
+      <div class="tier t-orange"><span class="dot"></span><span class="name">Orange</span>
+        <div class="desc">Serious. Routed to a person, or auto-fixed if you allow it.</div></div>
+      <div class="tier t-red"><span class="dot"></span><span class="name">Red</span>
+        <div class="desc">Highest. Held for human clearance by default.</div></div>
+    </div>
+    <div class="practice">
+      <span class="lab">In practice</span>
+      <p>A brief that mentions a client's email address trips an <strong>orange</strong> flag for
+      personal data, citing DIFC Data Protection. A brief that reads like individualised investment
+      advice is <strong>orange</strong> too. An automated instruction to execute a trade — something
+      your own policy forbids the AI from doing unattended — is <strong>red</strong> and blocked.</p>
+    </div>
+  </section>
+
+  <section id="fixes">
+    <p class="eyebrow">03 — Fixes &amp; verified rewrites</p>
+    <h2>Not just a flag — the fix, checked before it's offered</h2>
+    <p>When an output is flagged, the verdict carries a <strong>suggested fix</strong>. For
+      mechanical problems this is deterministic: personal data redacted to labelled tokens,
+      guaranteed-return language softened, each edit naming the finding it cures. For judgement
+      calls a rule can't mechanically fix — advice that should be general commentary — Attest can
+      also draft a <strong>rewrite</strong> with a model. The rewrite is never taken on trust: the
+      same deterministic engine re-judges it and only offers it if it now passes. Checked, not hoped.</p>
+    <pre><span class="c"># the fix rides with the flag; adopt it in your code and re-gate</span>
+if result.flagged and result.has_fix:
+    fixed = result.apply_suggestion()
+    proof = attest.gate(fixed, trace=result.trace_id,
+                        remediates=result.decision_seq)
+    <span class="c"># proof.compliant → the flag is closed in the sealed history</span></pre>
+    <div class="practice">
+      <span class="lab">In practice</span>
+      <p>The brief said “email sara.m@client.com for the allocation.” Attest returns the same
+      brief with the address replaced by <code>[REDACTED:email]</code> and a note citing the rule.
+      Where a draft reclassified “you should buy gold” into general commentary, it's marked
+      <em>needs human confirmation</em> — because a person, not a model, should confirm the meaning
+      really changed.</p>
+    </div>
+  </section>
+
+  <section id="auto">
+    <p class="eyebrow">04 — Auto vs human, your call per tier</p>
+    <h2>You choose which tiers heal themselves</h2>
+    <p>You decide, per risk tier, whether Attest's SDK applies a verified fix itself or leaves
+      every fix to a person. One line of configuration. The default, if you set nothing, is
+      human-everything.</p>
+    <pre>attest = AttestClient(
+    api_key="…", base_url="…",
+    auto_remediate={<span class="k">"yellow"</span>: "auto",
+                    <span class="k">"orange"</span>: "auto",
+                    <span class="k">"red"</span>: "human"},
+)</pre>
+    <p>With a tier set to <code>auto</code>, a flagged output at that tier whose fix is
+      <strong>complete and gate-verified</strong> is applied and re-gated inside the same call —
+      you get back the final (usually compliant) verdict, and the original flag stays sealed in the
+      chain. Auto mode never crosses three lines, whatever you configure: blocked actions, rewrites
+      that changed what the output <em>is</em>, and incomplete fixes.</p>
+    <div class="practice">
+      <span class="lab">In practice</span>
+      <p>Your desk sets yellow and orange to <code>auto</code> and red to <code>human</code>. The
+      personal-data brief is silently corrected and served, its flag-and-fix recorded; the
+      trade-execution attempt still stops dead and waits for a compliance officer. Routine noise
+      heals itself; the genuinely serious thing always reaches a person.</p>
+    </div>
+  </section>
+
+  <section id="queue">
+    <p class="eyebrow">05 — The work queue</p>
+    <h2>Everything waiting on a person, in one place</h2>
+    <p>The console opens on a work queue built for a compliance officer's day, not for browsing
+      events. It has three parts, because they're three different jobs.</p>
+    <ol class="steps">
+      <li><span class="st">Approvals waiting for a decision</span><span class="sd">Red and orange
+        items routed to a person, each shown with what it is — action, tier, when it was raised.
+        Approve or deny in one click, with an optional comment.</span></li>
+      <li><span class="st">Rewrites awaiting confirmation</span><span class="sd">Model-drafted
+        rewrites the gate verified but which changed what the output is. A person confirms the
+        change of meaning before it's adopted.</span></li>
+      <li><span class="st">Flags awaiting remediation</span><span class="sd">Non-compliant outputs
+        whose fix hasn't landed yet. The open loop stays visible — silence never hides an unresolved
+        problem.</span></li>
+    </ol>
+    <div class="practice">
+      <span class="lab">In practice</span>
+      <p>Your officer signs in and sees “3 waiting.” The trade-execution block sits at the top in
+      red; she reads it, adds “out of mandate — declined,” and clicks Deny. The record now shows
+      <em>her</em>, by verified name, as the person who decided — not a system string.</p>
+    </div>
+  </section>
+
+  <section id="record">
+    <p class="eyebrow">06 — The tamper-evident record</p>
+    <h2>Proof an outsider can check without trusting you</h2>
+    <p>Every decision and output is recorded as an event that is hashed, digitally signed,
+      chained to the one before it, and anchored to an independent external timestamp authority.
+      That last step is what makes the history impossible to rewrite after the fact — not even by
+      Attest. Any tampering is detected, and the exact altered record is named.</p>
+    <p>You can prove a whole trace two ways: <strong>replay</strong> checks its integrity on the
+      spot, and <strong>evidence export</strong> produces a self-contained bundle — the records,
+      the public key, and a standalone <code>verify.py</code> that re-checks every hash, signature,
+      chain link and anchor <em>offline</em>, exactly as a regulator or auditor would.</p>
+    <div class="practice">
+      <span class="lab">In practice</span>
+      <p>Six months on, a regulator asks about a specific brief. You export its bundle and hand it
+      over. They run the included script on their own machine, with no access to your systems, and
+      watch it confirm: recorded when you say, unaltered since, and here is the flag, the fix, and
+      the proof the fix shipped.</p>
+    </div>
+    <div class="callout"><b>What this proves — and what it doesn't.</b> Attest proves records are
+      <em>unaltered</em>: it's a speed camera, not the speed limit. It does not certify that an
+      output was lawful. Regulation packs are drafted from public sources and labelled by
+      verification status until reviewed by counsel.</div>
+  </section>
+
+  <section id="privacy">
+    <p class="eyebrow">07 — Customer-key confidentiality</p>
+    <h2>Keep your content dark, even to us</h2>
+    <p>By default Attest can read the content it stores. If you'd rather it couldn't, switch on
+      <strong>customer-key</strong> mode: your content is encrypted to a key you hold, so stored
+      records are dark to Attest — and to our hosting provider — until you deliberately release a
+      key through the consent ceremony. The signed metadata (hashes, decisions, tiers) is still
+      enough to run every dashboard and prove integrity without anyone reading the content.</p>
+    <div class="practice">
+      <span class="lab">In practice</span>
+      <p>Your legal team asks Attest to review one flagged brief from last quarter. You approve a
+      single-record release in the console; Attest can read that one record and nothing else. Deny,
+      and it reads nothing at all — and both the request and your answer are themselves recorded.</p>
+    </div>
+  </section>
+
+  <section id="access">
+    <p class="eyebrow">08 — Logins &amp; roles</p>
+    <h2>Named people, with the right level of access</h2>
+    <p>Your team signs in with email and password (with a one-time email code for the first
+      sign-in and for resets). Three roles: <strong>admin</strong> manages users and policy,
+      <strong>officer</strong> approves and confirms, <strong>viewer</strong> reads only. The point
+      of named logins isn't bureaucracy — it's that when an officer approves something, the
+      tamper-evident record names <em>that verified person</em>, which is exactly the evidence a
+      record-keeping regime like DIFC asks for.</p>
+    <div class="practice">
+      <span class="lab">In practice</span>
+      <p>Your head of compliance is an admin and sets desk policy; two analysts are officers who
+      clear the daily queue; your auditor gets a viewer login to inspect and export, unable to
+      change anything. Every approval in the chain carries a real name.</p>
+    </div>
+  </section>
+
+  <section id="start">
+    <p class="eyebrow">Getting started</p>
+    <h2>The shortest path in</h2>
+    <ol class="steps">
+      <li><span class="st">Sign in and set up</span><span class="sd">Open the console, declare
+        your jurisdictions and sectors (this derives your rulebooks), and publish a starter policy
+        you can edit.</span></li>
+      <li><span class="st">Test a rule before you rely on it</span><span class="sd">Use the dry-run
+        box on the Compliance screen: paste a sample output, see the verdict your live policy would
+        give — nothing recorded.</span></li>
+      <li><span class="st">Add one gate call</span><span class="sd">Drop <code>attest.gate()</code>
+        into your serving path and read the verdict. That's the integration.</span></li>
+      <li><span class="st">Choose your auto/human policy</span><span class="sd">Set
+        <code>auto_remediate</code> per tier, then watch the work queue for what reaches a
+        person.</span></li>
+    </ol>
+  </section>
+
+  <footer>
+    Attest — a tamper-evident AI audit layer. This guide describes the platform's features for
+    pilot use; regulation packs are labelled by verification status and are not a substitute for
+    legal advice. Questions go to your Attest contact.
+  </footer>
+</div>

@@ -1023,3 +1023,30 @@ officer work queue. Founder's next move: Render sitting (deploy latest +
 ANTHROPIC_API_KEY + dress rehearsal + create real admin user + send
 TradeEasy package). Reminder set in DEPLOY_MIRROR doc lore: fine-grained
 tokens default to Contents read-only; check the dropdown.
+
+--- 2026-09-03 (cont.) — the four "finish these" items ---
+#4 SECURITY: SecurityHeadersMiddleware (CSP/HSTS-https-only/XFO/nosniff/
+   Referrer/Permissions) on every response incl. static console; .github/
+   dependabot.yml (pip+actions weekly); pip-audit in requirements-dev;
+   SECURITY.md (full posture + data-residency answer + known-gaps table +
+   incident runbook). tests/test_security_headers.py (4).
+#2 DASHBOARD: POST /v1/policies/preview (app/services/policy_preview.py) —
+   dry-run a sample output vs active/version/candidate rules, records NOTHING,
+   same pipeline as the gate; console "Test a rule — dry run" box on Compliance
+   screen (reuses statusChip). tests/test_policy_preview.py (5). LESSON AGAIN:
+   duplicate const (STATUSCHIP) in the single console script scope broke it —
+   caught by Playwright pageerror; grep identifiers before adding consts.
+#3 STYLED GUIDE: docs/CLIENT_GUIDE.html + Artifact
+   https://claude.ai/code/artifact/01e9cd6c-1657-4b8e-82ea-22e7e215d680
+   Feature-by-feature, worked DIFC fintech example each. Attest identity
+   (Fraunces + IBM Plex, product palette), theme-aware.
+#6 LANDING PAGE: site/index.html (deployable static; deploy note at top;
+   contact form -> FORM_ENDPOINT placeholder + honeypot + mailto fallback,
+   never touches prod API) + Artifact
+   https://claude.ai/code/artifact/d97ca835-f381-4be2-b5eb-ead05a80b384
+   Contact form deliberately NOT using artifact db (would expose leads);
+   form-service + email is the correct architecture.
+Suite 280 (auth/preview/security). Landing/guide are static, not in pytest.
+Founder still owes: Render deploy of everything + ANTHROPIC_API_KEY + dress
+rehearsal; then domain (unlocks real login email + form delivery). Website
+deploy is theirs (static host + domain + Formspree id).

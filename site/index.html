@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Attest — Provable AI Compliance</title>
+<meta name="description" content="A tamper-evident audit layer for AI in regulated finance. Every AI action checked, fixed where needed, and recorded so an outsider can verify it — proposed for UAE regulated-finance and government use.">
+<!--
+  ============================================================================
+  DEPLOYING THIS PAGE
+  ----------------------------------------------------------------------------
+  This is a standalone marketing page. It holds no secrets and never talks to
+  the Attest product API — the contact form posts to an independent form
+  service, exactly so a bug here can never reach production data.
+
+  1. Host it on any static host (Render Static Site, Vercel, Cloudflare Pages —
+     all have free tiers with automatic HTTPS). Point your domain at it.
+  2. Wire the contact form: create a free form at https://formspree.io (or
+     Basin / Getform), then set FORM_ENDPOINT below to the form's URL and
+     CONTACT_EMAIL to the address you want inquiries to reach. Until you do,
+     the form falls back to opening the visitor's email client, pre-filled.
+  3. Add a privacy notice (the form collects personal data — under the UAE
+     PDPL you need one) and link it in the footer where marked.
+  ============================================================================
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root {
+    --bg:#edf0f3; --card:#ffffff; --sunk:#f4f6f8; --deep:#101a26;
+    --line:#dbe0e7; --line2:#e7ebef;
+    --ink:#14202e; --body:#3a4453; --mut:#5a6779; --faint:#8b95a3; --onDeep:#c6d2e0;
+    --blue:#1568d4; --blueSoft:rgba(21,104,212,.09); --blueLine:#b9d5f5;
+    --seal:#9a6a1e; --sealSoft:rgba(154,106,30,.10);
+    --green:#20713a;
+    --shadow:0 1px 2px rgba(20,32,46,.05), 0 12px 32px -22px rgba(20,32,46,.4);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg:#0c121a; --card:#141d27; --sunk:#0f161f; --deep:#080d14;
+      --line:#263140; --line2:#1e2731;
+      --ink:#eef2f6; --body:#c2ccd8; --mut:#93a0b0; --faint:#6b7888; --onDeep:#aebccd;
+      --blue:#63a4f0; --blueSoft:rgba(99,164,240,.12); --blueLine:#2f4d6e;
+      --seal:#cfa860; --sealSoft:rgba(207,168,96,.13);
+      --green:#5fbf80;
+      --shadow:0 1px 2px rgba(0,0,0,.4), 0 14px 40px -26px rgba(0,0,0,.7);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg:#0c121a; --card:#141d27; --sunk:#0f161f; --deep:#080d14;
+    --line:#263140; --line2:#1e2731;
+    --ink:#eef2f6; --body:#c2ccd8; --mut:#93a0b0; --faint:#6b7888; --onDeep:#aebccd;
+    --blue:#63a4f0; --blueSoft:rgba(99,164,240,.12); --blueLine:#2f4d6e;
+    --seal:#cfa860; --sealSoft:rgba(207,168,96,.13);
+    --green:#5fbf80;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 14px 40px -26px rgba(0,0,0,.7);
+  }
+  * { box-sizing:border-box; }
+  html { scroll-behavior:smooth; }
+  body { margin:0; background:var(--bg); color:var(--body);
+         font:16px/1.6 'IBM Plex Sans',-apple-system,'Segoe UI',sans-serif;
+         -webkit-font-smoothing:antialiased; }
+  img { max-width:100%; }
+  .mono { font-family:'IBM Plex Mono',ui-monospace,monospace; }
+  .shell { max-width:1000px; margin:0 auto; padding:0 24px; }
+
+  /* nav */
+  nav.bar { position:sticky; top:0; z-index:20; background:color-mix(in srgb,var(--bg) 88%, transparent);
+            backdrop-filter:blur(8px); border-bottom:1px solid var(--line); }
+  .bar .shell { display:flex; align-items:center; gap:14px; height:60px; }
+  .logo { font-family:'Fraunces',Georgia,serif; font-weight:600; font-size:21px; color:var(--ink); letter-spacing:.3px; }
+  .logo-tag { font-family:'Fraunces',serif; font-size:9.5px; letter-spacing:2.5px; color:var(--mut); text-transform:uppercase; }
+  .bar .spacer { flex:1; }
+  .bar a.nlink { color:var(--body); text-decoration:none; font-size:14px; margin-left:22px; }
+  .bar a.nlink:hover { color:var(--blue); }
+  .btn { display:inline-block; font:inherit; font-weight:600; font-size:14.5px; cursor:pointer;
+         border-radius:8px; padding:10px 20px; text-decoration:none; border:1px solid transparent; }
+  .btn.primary { background:var(--blue); color:#fff; }
+  .btn.primary:hover { filter:brightness(1.06); }
+  .btn.ghost { background:transparent; color:var(--ink); border-color:var(--line); }
+  .btn.ghost:hover { border-color:var(--blueLine); color:var(--blue); }
+  @media (max-width:640px){ .bar a.nlink{ display:none; } }
+
+  /* hero */
+  .hero { padding:76px 0 30px; }
+  .kicker { font-family:'IBM Plex Mono',monospace; font-size:11.5px; letter-spacing:2.5px;
+            text-transform:uppercase; color:var(--blue); margin:0 0 20px; }
+  h1 { font-family:'Fraunces',Georgia,serif; font-weight:500; color:var(--ink);
+       font-size:clamp(34px,6vw,60px); line-height:1.06; letter-spacing:-.8px;
+       text-wrap:balance; margin:0 0 22px; max-width:16ch; }
+  .hero .sub { font-size:19px; line-height:1.55; color:var(--mut); max-width:60ch; margin:0 0 30px; }
+  .hero-cta { display:flex; flex-wrap:wrap; gap:12px; align-items:center; }
+  .hero-cta .note { font-size:13px; color:var(--faint); }
+
+  /* the seal — a detail only this subject has: a hash-chained, anchored record */
+  .seal { margin:44px 0 0; background:var(--deep); border-radius:14px; padding:26px 28px;
+          box-shadow:var(--shadow); overflow-x:auto; }
+  .seal .cap { font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:2px;
+               text-transform:uppercase; color:#6f8196; margin-bottom:16px; }
+  .chain { display:flex; align-items:stretch; gap:0; min-width:560px; }
+  .link { flex:1; }
+  .link .box { border:1px solid #263647; border-radius:8px; padding:12px 13px; background:#0d1621; }
+  .link .ev { font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--onDeep); }
+  .link .hash { font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:#5f94d6; margin-top:6px; word-break:break-all; }
+  .link .tick { font-size:10.5px; color:#6f8196; margin-top:8px; }
+  .arrow { align-self:center; color:#3f5670; padding:0 8px; font-family:'IBM Plex Mono',monospace; }
+  .anchor { margin-top:14px; font-family:'IBM Plex Mono',monospace; font-size:11px; color:#7fb08e;
+            display:flex; align-items:center; gap:8px; }
+  .anchor .d { width:7px; height:7px; border-radius:50%; background:var(--green); }
+
+  /* generic section */
+  section { padding:52px 0; }
+  .eyebrow { font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:2.5px;
+             text-transform:uppercase; color:var(--seal); margin:0 0 12px; }
+  h2 { font-family:'Fraunces',Georgia,serif; font-weight:500; color:var(--ink);
+       font-size:clamp(26px,3.6vw,34px); line-height:1.16; letter-spacing:-.3px;
+       text-wrap:balance; margin:0 0 16px; max-width:20ch; }
+  section > .shell > p.intro { font-size:17.5px; color:var(--mut); max-width:60ch; margin:0 0 8px; }
+
+  .grid { display:grid; gap:16px; margin-top:30px; }
+  .g3 { grid-template-columns:repeat(3,1fr); }
+  .g2 { grid-template-columns:repeat(2,1fr); }
+  @media (max-width:760px){ .g3,.g2 { grid-template-columns:1fr; } }
+  .feat { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:22px 24px; }
+  .feat h3 { font-size:16.5px; color:var(--ink); margin:0 0 8px; font-weight:600; }
+  .feat p { font-size:14.5px; color:var(--mut); margin:0; line-height:1.55; }
+  .feat .n { font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--blue); margin-bottom:12px; }
+
+  /* how it works — a real sequence, so numbered */
+  .flow { display:grid; grid-template-columns:repeat(4,1fr); gap:0; margin-top:30px; }
+  @media (max-width:760px){ .flow { grid-template-columns:1fr; } }
+  .flow .step { padding:20px 22px 22px; border:1px solid var(--line); background:var(--card); }
+  .flow .step:nth-child(1){ border-radius:12px 0 0 12px; }
+  .flow .step:nth-child(4){ border-radius:0 12px 12px 0; }
+  .flow .step:not(:first-child){ border-left:none; }
+  @media (max-width:760px){ .flow .step, .flow .step:nth-child(1), .flow .step:nth-child(4){ border-radius:12px; border-left:1px solid var(--line); margin-bottom:10px; } }
+  .flow .num { font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--seal); }
+  .flow h4 { font-size:15px; color:var(--ink); margin:10px 0 6px; font-weight:600; }
+  .flow p { font-size:13.5px; color:var(--mut); margin:0; line-height:1.5; }
+
+  /* thesis band */
+  .thesis { background:var(--deep); }
+  .thesis .shell { padding:64px 24px; }
+  .thesis blockquote { margin:0; font-family:'Fraunces',Georgia,serif; font-weight:400;
+        font-size:clamp(24px,3.4vw,34px); line-height:1.32; color:#f2f6fb; letter-spacing:-.2px;
+        max-width:24ch; text-wrap:balance; }
+  .thesis blockquote .hl { color:#6ea8ec; }
+  .thesis .attrib { margin-top:20px; font-size:14px; color:#8496a8; max-width:52ch; }
+
+  /* contact */
+  .contact .shell { max-width:620px; }
+  form { background:var(--card); border:1px solid var(--line); border-radius:14px;
+         padding:28px 30px; box-shadow:var(--shadow); margin-top:24px; }
+  .field { margin-bottom:16px; }
+  label { display:block; font-size:12.5px; font-weight:600; color:var(--mut);
+          text-transform:uppercase; letter-spacing:.4px; margin-bottom:6px; }
+  input, textarea { width:100%; font:inherit; color:var(--ink); background:var(--sunk);
+        border:1px solid var(--line); border-radius:8px; padding:11px 13px; }
+  input:focus, textarea:focus { outline:none; border-color:var(--blueLine); box-shadow:0 0 0 3px var(--blueSoft); background:var(--card); }
+  textarea { min-height:110px; resize:vertical; }
+  .hp { position:absolute; left:-9999px; width:1px; height:1px; overflow:hidden; }
+  .formmsg { display:none; margin-top:14px; padding:12px 14px; border-radius:8px; font-size:14px; }
+  .formmsg.ok { display:block; background:rgba(32,113,58,.10); color:var(--green); }
+  .formmsg.err { display:block; background:rgba(176,58,46,.09); color:#b03a2e; }
+
+  footer { border-top:1px solid var(--line); padding:34px 0 60px; }
+  footer .shell { display:flex; flex-wrap:wrap; gap:16px 40px; align-items:baseline; }
+  footer .fnote { font-size:12.5px; color:var(--faint); max-width:60ch; line-height:1.55; }
+  footer a { color:var(--mut); }
+</style>
+</head>
+<body>
+
+<nav class="bar">
+  <div class="shell">
+    <span class="logo">Attest</span>
+    <span class="logo-tag">AI&nbsp;Audit</span>
+    <span class="spacer"></span>
+    <a class="nlink" href="#how">How it works</a>
+    <a class="nlink" href="#why">Why it's different</a>
+    <a class="nlink" href="#who">Who it's for</a>
+    <a class="btn primary" href="#contact" style="padding:8px 16px;">Request a pilot</a>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="shell">
+    <p class="kicker">Tamper-evident AI audit · UAE regulated finance</p>
+    <h1>Prove what your AI did — to anyone, later.</h1>
+    <p class="sub">Attest checks every AI output against the rules that apply to you, fixes what
+      it can, and records the whole thing as a signed, externally-anchored event an outsider can
+      verify without trusting you. Built for firms that will one day be asked to show their work.</p>
+    <div class="hero-cta">
+      <a class="btn primary" href="#contact">Request a pilot</a>
+      <a class="btn ghost" href="#how">See how it works</a>
+      <span class="note">Proposed for DIFC &amp; ADGM regulated-finance and government use.</span>
+    </div>
+
+    <div class="seal" aria-label="Illustration of a hash-chained, externally anchored record">
+      <div class="cap">A sealed record — each event chained to the last, anchored beyond reach</div>
+      <div class="chain">
+        <div class="link">
+          <div class="box">
+            <div class="ev">policy_decision · orange</div>
+            <div class="hash">sha256 9f3a…c1d0</div>
+            <div class="tick">flagged: personal data</div>
+          </div>
+        </div>
+        <div class="arrow">→</div>
+        <div class="link">
+          <div class="box">
+            <div class="ev">remediation · redact</div>
+            <div class="hash">sha256 24b7…8ef2</div>
+            <div class="tick">fix offered</div>
+          </div>
+        </div>
+        <div class="arrow">→</div>
+        <div class="link">
+          <div class="box">
+            <div class="ev">policy_decision · green</div>
+            <div class="hash">sha256 e0a5…7b41</div>
+            <div class="tick">compliant · closed</div>
+          </div>
+        </div>
+      </div>
+      <div class="anchor"><span class="d"></span>anchored to RFC-3161 timestamp authority · verifiable offline</div>
+    </div>
+  </div>
+</header>
+
+<section id="problem">
+  <div class="shell">
+    <p class="eyebrow">The problem</p>
+    <h2>AI moves fast. Proof doesn't keep up.</h2>
+    <p class="intro">When a regulator asks what your AI told a client six months ago — and whether
+      anyone changed the record since — an ordinary log is not an answer. Logs can be edited, and a
+      log you could edit is a log a regulator can't rely on. In DIFC and ADGM, where record-keeping
+      is a licence condition, that gap is a real exposure.</p>
+  </div>
+</section>
+
+<section id="how" style="background:var(--sunk);">
+  <div class="shell">
+    <p class="eyebrow">How it works</p>
+    <h2>One check, on the way out the door</h2>
+    <p class="intro">Your product makes one call before an AI output reaches a user. Everything
+      else — evaluation, the fix, the sealed record — happens inside it.</p>
+    <div class="flow">
+      <div class="step"><div class="num">01</div><h4>Check</h4>
+        <p>The output is judged against your own policy and the rulebooks that apply to you, and
+          landed on a green–red risk scale.</p></div>
+      <div class="step"><div class="num">02</div><h4>Fix</h4>
+        <p>If something's wrong, Attest proposes a fix — a redaction, or a model rewrite it has
+          re-checked as compliant before offering.</p></div>
+      <div class="step"><div class="num">03</div><h4>Decide</h4>
+        <p>You choose per risk level: let routine fixes apply automatically, and send the serious
+          ones to a named person for clearance.</p></div>
+      <div class="step"><div class="num">04</div><h4>Seal</h4>
+        <p>The decision and the output are signed, chained, and anchored to an independent
+          timestamp — provable later, unforgeable after.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="thesis">
+  <div class="shell">
+    <blockquote>“We flagged it. Here is the fix. Here is proof the fix shipped.
+      <span class="hl">And nobody can doctor that history.”</span></blockquote>
+    <p class="attrib">The sentence Attest is built to let you say — to a regulator, an auditor,
+      or a board — about any AI action your firm has taken.</p>
+  </div>
+</section>
+
+<section id="why">
+  <div class="shell">
+    <p class="eyebrow">Why it's different</p>
+    <h2>The proof survives a bad actor — including us</h2>
+    <div class="grid g3">
+      <div class="feat"><div class="n">01</div><h3>Anchored beyond reach</h3>
+        <p>Records are timestamped against an external authority, so history can't be rewritten
+          after the fact — not by an attacker, an insider, or Attest itself.</p></div>
+      <div class="feat"><div class="n">02</div><h3>Your keys, your content</h3>
+        <p>In customer-key mode your content is encrypted to a key you hold. Stored records stay
+          dark to Attest and its hosting until you release one.</p></div>
+      <div class="feat"><div class="n">03</div><h3>Only your policy blocks</h3>
+        <p>Jurisdiction rulebooks are advisory — they cite and raise risk, but only your own
+          reviewed policy can ever stop your business.</p></div>
+      <div class="feat"><div class="n">04</div><h3>Verifiable by outsiders</h3>
+        <p>Every case exports as a bundle with a standalone script a regulator runs on their own
+          machine — no access to your systems required.</p></div>
+      <div class="feat"><div class="n">05</div><h3>Named accountability</h3>
+        <p>When a person approves a sensitive output, the sealed record names that verified
+          individual — the evidence a record-keeping regime asks for.</p></div>
+      <div class="feat"><div class="n">06</div><h3>One line to integrate</h3>
+        <p>A single gate call in your serving path, an SDK that depends on almost nothing, and a
+          console your compliance team actually works in.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="who" style="background:var(--sunk);">
+  <div class="shell">
+    <p class="eyebrow">Who it's for</p>
+    <h2>Firms that will be asked to show their work</h2>
+    <div class="grid g2">
+      <div class="feat"><h3>Regulated finance in the DIFC &amp; ADGM</h3>
+        <p>Capital-markets and fintech platforms putting AI in front of clients, where
+          record-keeping and data protection are licence conditions, not nice-to-haves.</p></div>
+      <div class="feat"><h3>Government &amp; public bodies</h3>
+        <p>Public-sector teams adopting AI who need a defensible, independently-verifiable trail
+          of every automated decision.</p></div>
+    </div>
+    <p class="intro" style="margin-top:24px;">Currently in pilot. Regulation packs are drafted from
+      public sources and labelled by verification status pending legal review — Attest proves your
+      records are unaltered; it is a speed camera, not the speed limit.</p>
+  </div>
+</section>
+
+<section id="contact" class="contact">
+  <div class="shell">
+    <p class="eyebrow">Request a pilot</p>
+    <h2>Tell us what your AI touches</h2>
+    <p class="intro">A short note is enough. We'll reply with how a pilot would work for your desk.</p>
+    <form id="contactForm" novalidate>
+      <div class="field">
+        <label for="name">Name</label>
+        <input id="name" name="name" type="text" autocomplete="name" required>
+      </div>
+      <div class="field">
+        <label for="email">Work email</label>
+        <input id="email" name="email" type="email" autocomplete="email" required>
+      </div>
+      <div class="field">
+        <label for="company">Company</label>
+        <input id="company" name="company" type="text" autocomplete="organization">
+      </div>
+      <div class="field">
+        <label for="message">What would you want Attest to check?</label>
+        <textarea id="message" name="message" placeholder="e.g. AI-generated market briefs and client answers on a DIFC-licensed platform"></textarea>
+      </div>
+      <!-- honeypot: a real person never fills this; bots do -->
+      <div class="hp" aria-hidden="true">
+        <label for="website">Leave this field empty</label>
+        <input id="website" name="website" type="text" tabindex="-1" autocomplete="off">
+      </div>
+      <button class="btn primary" type="submit" style="width:100%;">Send</button>
+      <div class="formmsg" id="formmsg"></div>
+    </form>
+  </div>
+</section>
+
+<footer>
+  <div class="shell">
+    <div>
+      <span class="logo">Attest</span>
+      <div class="logo-tag" style="margin-top:4px;">Tamper-evident AI audit</div>
+    </div>
+    <p class="fnote">
+      Attest proves AI records are unaltered; it does not certify that an output was lawful, and
+      is not legal advice. Currently offered for pilot use with synthetic data.
+      <!-- Add your privacy notice link here before collecting real inquiries (UAE PDPL). -->
+      <br><a href="#">Privacy notice</a> · © <span id="yr"></span> Attest
+    </p>
+  </div>
+</footer>
+
+<script>
+  "use strict";
+  document.getElementById("yr").textContent = new Date().getFullYear();
+
+  // --- contact form -------------------------------------------------------
+  // Replace these two before going live (see the deploy note at the top).
+  const FORM_ENDPOINT = "";                    // e.g. "https://formspree.io/f/xxxxxxx"
+  const CONTACT_EMAIL = "hello@attest.example";
+
+  const form = document.getElementById("contactForm");
+  const msg = document.getElementById("formmsg");
+  function show(text, kind) { msg.textContent = text; msg.className = "formmsg " + kind; }
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (form.website.value) return;                 // honeypot tripped: silently drop
+    const name = form.name.value.trim();
+    const email = form.email.value.trim();
+    if (!name || !email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+      show("Please add your name and a valid work email.", "err"); return;
+    }
+    const data = {
+      name, email,
+      company: form.company.value.trim(),
+      message: form.message.value.trim(),
+    };
+    // Preferred path: post to your form service (works on the deployed site).
+    if (FORM_ENDPOINT) {
+      try {
+        const r = await fetch(FORM_ENDPOINT, {
+          method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify(data),
+        });
+        if (r.ok) { form.reset(); show("Thank you — we'll be in touch shortly.", "ok"); return; }
+      } catch (err) { /* fall through to email */ }
+    }
+    // Fallback: open the visitor's email client, pre-filled. Always works,
+    // needs no backend — and is what runs in a preview where posting is blocked.
+    const subject = encodeURIComponent(`Attest pilot inquiry — ${data.company || name}`);
+    const bodyText = encodeURIComponent(
+      `Name: ${name}\nEmail: ${email}\nCompany: ${data.company}\n\n${data.message}`);
+    window.location.href = `mailto:${CONTACT_EMAIL}?subject=${subject}&body=${bodyText}`;
+    show("Opening your email app to send — or write to us at " + CONTACT_EMAIL + ".", "ok");
+  });
+</script>
+</body>
+</html>
