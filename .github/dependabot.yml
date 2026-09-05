@@ -1,0 +1,19 @@
+# Automated dependency-update PRs + security alerts.
+# Weekly is enough for a small dependency surface; security alerts arrive
+# out-of-band regardless of this schedule once the repo has them enabled
+# (Settings -> Code security -> Dependabot alerts).
+version: 2
+updates:
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels: ["dependencies"]
+    commit-message:
+      prefix: "deps"
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels: ["dependencies", "ci"]

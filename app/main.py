@@ -21,6 +21,7 @@ from app.api.workqueue import router as workqueue_router
 from app.config import get_settings
 from app.crypto.signing_provider import SigningKeyError, get_signing_provider
 from app.middleware.rate_limit import RateLimitMiddleware
+from app.middleware.security_headers import SecurityHeadersMiddleware
 
 app = FastAPI(title="Attest API", version="0.2.0")
 settings = get_settings()
@@ -36,6 +37,9 @@ app.add_middleware(
     max_requests=settings.rate_limit_max_requests,
     window_seconds=settings.rate_limit_window_seconds,
 )
+# Outermost so its headers ride on every response, including errors and the
+# static console/login pages.
+app.add_middleware(SecurityHeadersMiddleware)
 app.include_router(events_router)
 app.include_router(gate_router)
 app.include_router(traces_router)

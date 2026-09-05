@@ -2,3 +2,4 @@
 pytest>=8.3.0
 ruff>=0.8.0
 mypy>=1.13.0
+pip-audit>=2.7  # audit dependencies for known CVEs: pip-audit -r requirements.txt
