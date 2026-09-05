@@ -31,7 +31,7 @@ jobs:
       contents: read
     steps:
       - name: Check out full history
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           # A shallow clone cannot be pushed to a different repository.
           fetch-depth: 0
