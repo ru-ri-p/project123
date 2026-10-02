@@ -1,0 +1,466 @@
+<title>Attest Build Status &amp; Roadmap</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root {
+    --bg:#eef1f4; --card:#ffffff; --sunk:#f4f6f8; --deep:#111a24;
+    --line:#dbe0e7; --line2:#e7ebef;
+    --ink:#16202e; --body:#3a4453; --mut:#5a6779; --faint:#8b95a3;
+    --blue:#1568d4; --blueSoft:rgba(21,104,212,.09); --blueLine:#b9d5f5;
+    --plain:#5a3fb0; --plainSoft:rgba(90,63,176,.08); --plainLine:#b7a6e6;
+    --green:#20713a; --greenSoft:rgba(32,113,58,.12);
+    --amber:#8a6410; --amberSoft:rgba(201,160,74,.16); --amberLine:#d8b25f;
+    --red:#b03a2e; --redSoft:rgba(176,58,46,.10); --redLine:#d29088;
+    --shadow:0 1px 2px rgba(22,32,46,.05), 0 9px 26px -18px rgba(22,32,46,.3);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg:#0e141c; --card:#161e28; --sunk:#0f161f; --deep:#080d14;
+      --line:#273240; --line2:#1f2833;
+      --ink:#eef2f6; --body:#c2ccd8; --mut:#93a0b0; --faint:#6b7888;
+      --blue:#63a4f0; --blueSoft:rgba(99,164,240,.12); --blueLine:#2f4d6e;
+      --plain:#b7a6e6; --plainSoft:rgba(150,125,224,.14); --plainLine:#4a3d78;
+      --green:#5fbf80; --greenSoft:rgba(95,191,128,.13);
+      --amber:#d7b264; --amberSoft:rgba(215,178,100,.14); --amberLine:#5c4a24;
+      --red:#e0897d; --redSoft:rgba(224,137,125,.12); --redLine:#5e332d;
+      --shadow:0 1px 2px rgba(0,0,0,.3), 0 10px 30px -20px rgba(0,0,0,.6);
+    }
+  }
+  :root[data-theme="dark"] {
+      --bg:#0e141c; --card:#161e28; --sunk:#0f161f; --deep:#080d14;
+      --line:#273240; --line2:#1f2833;
+      --ink:#eef2f6; --body:#c2ccd8; --mut:#93a0b0; --faint:#6b7888;
+      --blue:#63a4f0; --blueSoft:rgba(99,164,240,.12); --blueLine:#2f4d6e;
+      --plain:#b7a6e6; --plainSoft:rgba(150,125,224,.14); --plainLine:#4a3d78;
+      --green:#5fbf80; --greenSoft:rgba(95,191,128,.13);
+      --amber:#d7b264; --amberSoft:rgba(215,178,100,.14); --amberLine:#5c4a24;
+      --red:#e0897d; --redSoft:rgba(224,137,125,.12); --redLine:#5e332d;
+      --shadow:0 1px 2px rgba(0,0,0,.3), 0 10px 30px -20px rgba(0,0,0,.6);
+  }
+  * { box-sizing:border-box; }
+  html { scroll-behavior:smooth; }
+  body { margin:0; background:var(--bg); color:var(--body);
+         font:16px/1.62 'IBM Plex Sans',-apple-system,'Segoe UI',sans-serif; -webkit-font-smoothing:antialiased; }
+  .mono { font-family:'IBM Plex Mono',ui-monospace,monospace; }
+  .wrap { max-width:880px; margin:0 auto; padding:0 24px 100px; }
+  header.top { max-width:880px; margin:0 auto; padding:54px 24px 26px; }
+  .doc-eyebrow { font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:2.5px;
+                 text-transform:uppercase; color:var(--blue); margin:0 0 14px; }
+  .brand { font-family:'Fraunces',Georgia,serif; font-weight:600; font-size:19px; color:var(--ink); }
+  h1 { font-family:'Fraunces',Georgia,serif; font-weight:500; color:var(--ink);
+       font-size:clamp(30px,5vw,44px); line-height:1.08; letter-spacing:-.5px; text-wrap:balance; margin:12px 0 15px; }
+  .lede { font-size:18px; line-height:1.55; color:var(--mut); max-width:66ch; margin:0; }
+  .meta { display:flex; flex-wrap:wrap; gap:8px 22px; font-size:12.5px; color:var(--faint);
+          margin-top:22px; padding-top:18px; border-top:1px solid var(--line); }
+  .meta b { color:var(--body); font-weight:500; }
+
+  section { margin-top:46px; scroll-margin-top:16px; }
+  .eyebrow { font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:2.5px;
+             text-transform:uppercase; color:var(--blue); margin:0 0 10px; }
+  h2 { font-family:'Fraunces',Georgia,serif; font-weight:500; color:var(--ink); font-size:27px;
+       line-height:1.18; letter-spacing:-.2px; text-wrap:balance; margin:0 0 12px; }
+  h3 { font-size:16px; font-weight:600; color:var(--ink); margin:22px 0 7px; }
+  p { margin:0 0 13px; max-width:68ch; } strong { color:var(--ink); font-weight:600; } a { color:var(--blue); }
+  ul { max-width:68ch; padding-left:20px; } li { margin:5px 0; }
+
+  /* plain-English callout — the "for dummies" layer */
+  .plain { background:var(--plainSoft); border:1px solid var(--plainLine); border-radius:10px;
+           padding:13px 17px; margin:14px 0; font-size:14.5px; color:var(--body); }
+  .plain .lab { font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:2px;
+                text-transform:uppercase; color:var(--plain); display:block; margin-bottom:5px; }
+
+  .snapshot { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin:22px 0 4px; }
+  @media (max-width:720px){ .snapshot { grid-template-columns:repeat(2,1fr); } }
+  .snap { background:var(--card); border:1px solid var(--line); border-radius:11px; padding:15px 16px; box-shadow:var(--shadow); }
+  .snap .fig { font-family:'Fraunces',serif; font-weight:600; font-size:20px; color:var(--ink); line-height:1.1; }
+  .snap .lab { font-size:12px; color:var(--mut); margin-top:6px; line-height:1.4; }
+  .snap.ok .fig { color:var(--green); } .snap.warn .fig { color:var(--amber); }
+
+  .nav { display:flex; flex-wrap:wrap; gap:7px; margin-top:22px; }
+  .nav a { font-size:12.5px; text-decoration:none; color:var(--body); border:1px solid var(--line);
+           border-radius:20px; padding:4px 12px; background:var(--card); }
+  .nav a:hover { border-color:var(--blueLine); color:var(--blue); }
+
+  .mod { background:var(--card); border:1px solid var(--line); border-radius:11px; padding:18px 20px; margin:12px 0; box-shadow:var(--shadow); }
+  .mod h3 { margin:0 0 6px; }
+  .mod .st { font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:1px; text-transform:uppercase;
+             padding:2px 9px; border-radius:20px; border:1px solid var(--green); color:var(--green); background:var(--greenSoft); margin-left:8px; }
+  .mod p { font-size:14px; margin:6px 0; }
+
+  table { width:100%; border-collapse:collapse; margin:14px 0; font-size:13.5px; display:block; overflow-x:auto; }
+  th, td { text-align:left; padding:9px 11px; border-bottom:1px solid var(--line2); vertical-align:top; }
+  th { font-size:10px; letter-spacing:.8px; text-transform:uppercase; color:var(--faint); font-weight:600; white-space:nowrap; }
+  td strong { color:var(--ink); }
+  tbody tr:last-child td { border-bottom:none; }
+  .sev { font-family:'IBM Plex Mono',monospace; font-weight:600; font-size:11px; white-space:nowrap; }
+  .p0 { color:var(--red); } .p1 { color:var(--amber); } .p2 { color:var(--blue); } .p3 { color:var(--faint); }
+
+  ol.plan { counter-reset:p; list-style:none; padding:0; margin:16px 0 0; }
+  ol.plan li { counter-increment:p; position:relative; padding:0 0 18px 46px; }
+  ol.plan li:before { content:counter(p); position:absolute; left:0; top:-2px; width:30px; height:30px;
+        border-radius:50%; background:var(--blueSoft); color:var(--blue); border:1px solid var(--blueLine);
+        font-family:'IBM Plex Mono',monospace; font-weight:500; display:flex; align-items:center; justify-content:center; }
+  ol.plan .pt { font-weight:600; color:var(--ink); display:block; margin-bottom:2px; font-size:15px; }
+  ol.plan .pd { font-size:14px; color:var(--mut); }
+  .gate { font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:1.5px; text-transform:uppercase;
+          color:var(--red); border:1px solid var(--redLine); background:var(--redSoft); border-radius:5px; padding:1px 7px; margin-left:6px; }
+  .gate.b { color:var(--amber); border-color:var(--amberLine); background:var(--amberSoft); }
+
+  .callout { border:1px solid var(--redLine); background:var(--redSoft); border-radius:10px; padding:15px 18px; margin:16px 0; font-size:14.5px; }
+  .callout b { color:var(--ink); }
+  footer { max-width:880px; margin:50px auto 0; padding:22px 24px 0; border-top:1px solid var(--line); font-size:12px; color:var(--faint); line-height:1.55; }
+  dl.gloss dt { font-weight:600; color:var(--ink); margin-top:12px; font-size:14.5px; }
+  dl.gloss dd { margin:2px 0 0; font-size:14px; color:var(--mut); }
+</style>
+
+<header class="top">
+  <p class="doc-eyebrow">Internal status &amp; roadmap · October 2026</p>
+  <div class="brand">Attest</div>
+  <h1>Everything built so far, what's broken, and what's next</h1>
+  <p class="lede">The complete picture of the Attest platform as it stands — every system, the
+    tests behind it, the issues still open, and the sequenced plan to first live customer. Each
+    section has a technical explanation and a plain-English one.</p>
+  <div class="meta">
+    <span><b>Code state</b> commit 77a3fcb · branch pushed &amp; mirrored</span>
+    <span><b>Tests</b> 280 passing</span>
+    <span><b>QC</b> 27/27 dress rehearsal (local)</span>
+    <span><b>Live status</b> production deploy pending</span>
+  </div>
+  <div class="plain"><span class="lab">In plain English</span>
+    The software is built and thoroughly tested on our own machines. It is <strong>not yet
+    switched on for real users</strong> — one deployment step stands between "works in the lab" and
+    "live." This document explains what exists, what still needs doing, and in what order.</div>
+  <nav class="nav">
+    <a href="#status">Status snapshot</a>
+    <a href="#built">What's built</a>
+    <a href="#testing">Testing &amp; QC</a>
+    <a href="#deploy">How deployment works</a>
+    <a href="#business">Business assets</a>
+    <a href="#issues">Issues to fix</a>
+    <a href="#next">What's next</a>
+    <a href="#gloss">Glossary</a>
+  </nav>
+</header>
+
+<div class="wrap">
+
+  <section id="what">
+    <h2>What Attest is, in one paragraph</h2>
+    <p>Attest is a <strong>tamper-evident AI audit layer</strong> — an SDK and API that records
+      every AI action your product takes as a cryptographically signed, hash-chained, externally
+      time-stamped event that an outsider can verify without trusting you. On the way, it checks
+      each AI output against your own policy and the rulebooks that apply to you, flags or blocks
+      problems, and proposes compliant fixes. It is aimed at UAE regulated finance (DIFC/ADGM) and
+      government.</p>
+    <div class="plain"><span class="lab">In plain English</span>
+      Think of a flight recorder for AI. Every time your AI says or does something, Attest writes
+      it into a sealed logbook that can't be secretly edited later — not even by us — and checks it
+      against the rules first. If something's wrong, it says so and suggests the fix. The pitch:
+      <em>"we flagged it, here's the fix, here's proof the fix shipped, and nobody can doctor that
+      history."</em></p>
+  </section>
+
+  <section id="status">
+    <p class="eyebrow">01 · Where things stand</p>
+    <h2>Status snapshot</h2>
+    <div class="snapshot">
+      <div class="snap ok"><div class="fig">280 ✓</div><div class="lab">automated tests passing (most written as attacks)</div></div>
+      <div class="snap ok"><div class="fig">27/27</div><div class="lab">end-to-end QC dress rehearsal, exit 0 (local)</div></div>
+      <div class="snap ok"><div class="fig">Mirror ✓</div><div class="lab">dev → main → deploy repo in sync (green)</div></div>
+      <div class="snap warn"><div class="fig">Deploy ⏳</div><div class="lab">production still on pre-auth code — the one open gate</div></div>
+    </div>
+    <p>The codebase is feature-complete for a pilot and verified on synthetic data. The gap between
+      here and a live customer is operational, not technical: a production deploy, an email
+      provider (needs a domain), and the legal/commercial groundwork.</p>
+    <div class="plain"><span class="lab">In plain English</span>
+      Green across the board in the lab. The remaining to-dos are "switch it on in production,"
+      "buy a domain so login emails work," and "get the lawyer paperwork done before a real client
+      sends real data." None of those is code.</div>
+  </section>
+
+  <section id="built">
+    <p class="eyebrow">02 · What's been built</p>
+    <h2>The system, module by module</h2>
+    <p>Everything below is implemented, tested, and committed. Each block names what it does
+      technically, then in plain terms.</p>
+
+    <div class="mod">
+      <h3>Cryptographic core<span class="st">done</span></h3>
+      <p><b>Technical:</b> one canonicalisation function (shared by write and verify paths), SHA-256
+        hashing, Ed25519 signatures, hash-chaining of events, Merkle batching, and anchoring each
+        batch to an external RFC-3161 timestamp authority (endpoint swappable via
+        <span class="mono">ANCHOR_TSA_URL</span>). A per-event algorithm id allows future
+        post-quantum migration. The verifier never raises on bad input — it reports and continues.</p>
+      <div class="plain"><span class="lab">In plain English</span>
+        This is the sealed-logbook machinery. Each entry is fingerprinted, signed, and chained to
+        the one before it, then stamped by an independent outside clock — so any later edit is
+        instantly detectable, and the outside stamp means not even we can backdate or rewrite it.</div>
+    </div>
+
+    <div class="mod">
+      <h3>Events, API &amp; SDK<span class="st">done</span></h3>
+      <p><b>Technical:</b> FastAPI service (16 routers) over PostgreSQL; the Python SDK (v0.2.0) is a
+        thin HTTP client + local policy pre-check + durable offline buffer. The whole integration is
+        one <span class="mono">gate()</span> call; sequence numbers are assigned server-side.</p>
+      <div class="plain"><span class="lab">In plain English</span>
+        The customer's engineers add one line of code. Everything — checking, recording, sealing —
+        happens behind that single call.</div>
+    </div>
+
+    <div class="mod">
+      <h3>Policy gate &amp; risk tiers<span class="st">done</span></h3>
+      <p><b>Technical:</b> a deterministic verdict pipeline — feature extraction → the customer's own
+        policy (the only layer that can deny) → advisory jurisdiction packs (raise tier, cite the
+        instrument, never block) → a green/yellow/orange/red tier and a compliant/flagged/blocked
+        status. Red + flag on a customer rule is the human-approval gate.</p>
+      <div class="plain"><span class="lab">In plain English</span>
+        A traffic light for every AI output. Green = fine, red = stop. Only the customer's own rules
+        can actually stop something; our regulation libraries can warn and cite the law but never
+        block the business.</div>
+    </div>
+
+    <div class="mod">
+      <h3>Remediation loop (deterministic + model rewrite)<span class="st">done</span></h3>
+      <p><b>Technical:</b> flagged/blocked verdicts carry a deterministic fix plan (redact PII to
+        labelled tokens, soften promissory phrasing); for judgement-call violations a model drafts a
+        rewrite that the <em>same deterministic engine</em> re-judges before offering ("the model
+        proposes, the gate disposes"). Reclassifications require human confirmation. The fix is sealed
+        under a plan-hash; applying it and re-gating compliant closes the flag as REMEDIATED.</p>
+      <div class="plain"><span class="lab">In plain English</span>
+        It doesn't just say "this is wrong" — it hands over a corrected version, and proves the
+        correction itself was checked, not just trusted. When the fix is applied, the original
+        problem is marked closed in the sealed record.</div>
+    </div>
+
+    <div class="mod">
+      <h3>SDK per-tier auto-remediation<span class="st">done</span></h3>
+      <p><b>Technical:</b> <span class="mono">auto_remediate={"yellow":"auto","orange":"auto","red":"human"}</span>
+        — the customer chooses, per tier, whether the SDK applies a complete gate-verified fix itself
+        (and re-gates in the same call) or leaves it to a person. Never crosses three lines: blocked
+        verdicts, human-confirmation rewrites, incomplete fixes.</p>
+      <div class="plain"><span class="lab">In plain English</span>
+        The client decides which problems fix themselves automatically and which must wait for a
+        human to approve — serious things always wait for a person.</div>
+    </div>
+
+    <div class="mod">
+      <h3>Content encryption, customer-key &amp; consent<span class="st">done</span></h3>
+      <p><b>Technical:</b> AES-256-GCM content encryption; customer-key mode wraps content keys to a
+        public key the org holds, so stored content is dark to Attest until released through a scoped
+        consent ceremony (generate keypair → enable → approve/deny per request). Requests and answers
+        are themselves recorded.</p>
+      <div class="plain"><span class="lab">In plain English</span>
+        The client can lock their content with a key only they hold. We store it but can't read it —
+        until they explicitly unlock one specific record for a specific reason. This is the rarest
+        thing we do; no competitor pairs it with the sealed logbook.</div>
+    </div>
+
+    <div class="mod">
+      <h3>Evidence export &amp; offline verifier<span class="st">done</span></h3>
+      <p><b>Technical:</b> <span class="mono">/v1/evidence/{trace}/export?format=zip</span> produces a
+        self-contained bundle (events, manifest, compliance summary, public key, a standalone
+        <span class="mono">verify.py</span>, README) that re-checks every hash, signature, chain link
+        and anchor <em>offline</em>.</p>
+      <div class="plain"><span class="lab">In plain English</span>
+        One click produces a package a regulator runs on their own laptop, with no access to our
+        systems, to confirm the records are genuine and unaltered. This is the product's whole point.</div>
+    </div>
+
+    <div class="mod">
+      <h3>Human authentication (users, roles, passwords, login)<span class="st">done</span></h3>
+      <p><b>Technical:</b> users with roles (admin/officer/viewer); email + password login with
+        Argon2id hashing, durable per-account lockout, and a one-time emailed code for first sign-in
+        and reset; 256-bit session tokens stored hashed and revocable; a styled <span class="mono">/login</span>
+        page and a session-aware console. No user enumeration; timing-equalised failures.</p>
+      <div class="plain"><span class="lab">In plain English</span>
+        Real people log in with email and password; the system is built so a stolen database or a
+        guessing attack gets nowhere. The one catch: sending the login-code emails needs a domain we
+        don't own yet (see Issues).</div>
+    </div>
+
+    <div class="mod">
+      <h3>Named-person approvals &amp; the officer work queue<span class="st">done</span></h3>
+      <p><b>Technical:</b> a signed-in officer resolves approvals; the sealed event records their
+        <em>verified</em> identity (user id + display name, PII-safe) vs a name merely asserted over
+        the API key. The console opens on a work queue: approvals waiting, rewrites awaiting
+        confirmation, and flags awaiting remediation, with one-click approve/deny.</p>
+      <div class="plain"><span class="lab">In plain English</span>
+        When a compliance officer approves something, the record names <em>that real person</em> —
+        exactly the accountability a regulator wants. And their day starts on a "here's what's
+        waiting for you" screen, not a data dump.</div>
+    </div>
+
+    <div class="mod">
+      <h3>Policy dry-run preview<span class="st">done</span></h3>
+      <p><b>Technical:</b> <span class="mono">/v1/policies/preview</span> judges a sample output
+        against the active, a named, or a candidate ruleset using the exact gate pipeline, recording
+        nothing — surfaced as a "Test a rule" box in the console.</p>
+      <div class="plain"><span class="lab">In plain English</span>
+        An officer can paste a sample and see what the rules would do, before relying on them —
+        nothing is recorded, so it's a safe sandbox.</div>
+    </div>
+
+    <div class="mod">
+      <h3>Regulation packs &amp; watch, security hardening<span class="st">done (with caveats)</span></h3>
+      <p><b>Technical:</b> jurisdiction rule packs (DIFC-focused) with a scheduled regulation-watch
+        (pacing, retirement, hand-attestation for Attest's own team); security response headers
+        (CSP, HSTS, X-Frame-Options, nosniff, Referrer/Permissions), Dependabot, pip-audit, and a
+        SECURITY.md (posture, data-residency answer, incident runbook).</p>
+      <div class="plain"><span class="lab">In plain English</span>
+        The regulation libraries exist and refresh themselves carefully, and the web layer is
+        hardened against common attacks. Caveat: the rule content is drafted from public sources and
+        <em>not yet lawyer-reviewed</em> — it's labelled accordingly and can never block a client.</div>
+    </div>
+  </section>
+
+  <section id="testing">
+    <p class="eyebrow">03 · Testing &amp; QC</p>
+    <h2>How we know it works</h2>
+    <ul>
+      <li><strong>280 automated tests pass</strong>, most written as attacks (cross-org reaches,
+        session theft, code brute-forcing, user enumeration, tamper attempts).</li>
+      <li><strong>Break-and-detect tamper tests (21) pass</strong> — altering any record is detected
+        and the exact record named. This is a CLAUDE.md rule before every commit.</li>
+      <li><strong>27/27 dress rehearsal, exit 0</strong> — the full customer-pilot path on synthetic
+        orgs: verdicts, the sealed chain, the remediation loop, customer-key consent, an outage drill,
+        and an evidence bundle verified offline ("ALL EVENTS VERIFIED").</li>
+      <li><strong>A concrete synthetic trace</strong> (a TradeEasy-style brief leaking a client email)
+        was run end-to-end: flagged orange citing DIFC Reg 10 → redacted fix → re-gate compliant →
+        all four sealed events verified.</li>
+    </ul>
+    <div class="plain"><span class="lab">In plain English</span>
+      We didn't just build it and hope. We ran fake-but-realistic data through the real system, tried
+      to break and tamper with it on purpose, and it held — including the all-important test where an
+      outsider re-checks the sealed records and confirms they're genuine.</div>
+    <div class="callout"><b>The one QC step left:</b> this all ran on our machines. The final gate
+      before a real customer is running the <em>same</em> dress rehearsal against the live
+      production server <em>after</em> it's deployed — expecting the same 27/27. That is the
+      go/no-go for sending the TradeEasy package.</div>
+  </section>
+
+  <section id="deploy">
+    <p class="eyebrow">04 · How deployment works</p>
+    <h2>The pipeline, and why production is behind</h2>
+    <p><b>Technical:</b> work lands on the feature branch → merged to <span class="mono">main</span>
+      → a GitHub Action mirrors <span class="mono">main</span> to the deploy repo
+      (<span class="mono">ru-ri-p/project123</span>) → Render builds from there with
+      <strong>autoDeploy off</strong>, so a human clicks Manual Deploy. The mirror was broken by an
+      expired token and is now fixed and green. But the <strong>manual Render deploy has not been
+      done since the pre-authentication commit</strong>, so production is running old code: no
+      auth, no work queue, no rule-preview, no security headers, SDK 0.1.</p>
+    <div class="plain"><span class="lab">In plain English</span>
+      Our code travels through three stops before it's live, and the last stop is a manual button in
+      Render that hasn't been pressed in a while. So everything built in the last several weeks is
+      written down and ready, but the public server is still running the older version. Pressing
+      that button (plus two small settings) is the single most important next action.</div>
+  </section>
+
+  <section id="business">
+    <p class="eyebrow">05 · Business &amp; GTM assets produced</p>
+    <h2>Non-code deliverables</h2>
+    <p>Alongside the software, a full set of founder-facing material exists (styled pages + PDFs,
+      all committed): the <strong>Client Guide</strong> and <strong>SDK Guide</strong>
+      (feature-by-feature with worked examples), the <strong>GTM &amp; Pricing analysis</strong>
+      (ideal customer, buyer personas, segment pricing), the <strong>Competitive Landscape</strong>
+      report (sourced; the key finding that our crypto is now commodity and the moat is the bundle +
+      customer-key + UAE), a <strong>20-target prospect sheet</strong> with warm-intro paths (a live
+      Google Sheet), a <strong>landing page</strong> with a contact form, B2B <strong>email
+      copy</strong>, and the <strong>pilot/testing docs</strong> for TradeEasy.</p>
+    <div class="plain"><span class="lab">In plain English</span>
+      The selling materials are done too — how-to guides for clients, who to target and what to say,
+      pricing, a read on the competition, and a simple website. Most are downloadable as PDFs.</div>
+  </section>
+
+  <section id="issues">
+    <p class="eyebrow">06 · Issues &amp; things to fix</p>
+    <h2>The honest open list</h2>
+    <p>Ranked by priority. P0 blocks a live customer; P1 is needed before real customer <em>data</em>;
+      P2 is production hardening; P3 is later polish.</p>
+    <table>
+      <thead><tr><th>Pri</th><th>Issue</th><th>Plain English</th><th>Fix</th></tr></thead>
+      <tbody>
+        <tr><td class="sev p0">P0</td><td><strong>Production not deployed</strong> — live Render service on pre-auth commit (<span class="mono">ced9f0f</span>).</td><td>Everything new is built but not switched on for users.</td><td>Manual Deploy latest on Render; re-run dress rehearsal on prod (expect 27/27).</td></tr>
+        <tr><td class="sev p0">P0</td><td><strong>ANTHROPIC_API_KEY not set</strong> on prod → model rewrites inactive.</td><td>The "suggest a rewritten version" feature is off until a key is added.</td><td>Create key (spend cap), add to Render env, redeploy. Mechanical fixes work without it.</td></tr>
+        <tr><td class="sev p1">P1</td><td><strong>No email provider</strong> — login codes / resets can't be delivered in production (dev-mode only).</td><td>Real users can't receive their login code yet.</td><td>Buy domain → create Resend account → verify domain (SPF/DKIM) → wire the one <span class="mono">TODO(EMAIL)</span>.</td></tr>
+        <tr><td class="sev p1">P1</td><td><strong>Our own data-protection compliance</strong> — privacy policy, DPA template, PDPL/DIFC registration.</td><td>A compliance company must itself be compliant before holding anyone's data.</td><td>UAE counsel; publish privacy notice; DPA to sign with customers.</td></tr>
+        <tr><td class="sev p1">P1</td><td><strong>Pilot contract + liability cap + insurance</strong> before real data flows.</td><td>Sitting in a compliance path uncapped/uninsured is a serious risk.</td><td>Lawyer-drafted pilot agreement (liability cap, IP, the "speed camera" disclaimer); cyber/PI insurance.</td></tr>
+        <tr><td class="sev p1">P1</td><td><strong>Anthropic customer-data consent line</strong> before real content transits the rewrite feature.</td><td>Real client text passing through the AI needs one disclosure sentence.</td><td>Add the line to the pilot agreement; synthetic data needs nothing.</td></tr>
+        <tr><td class="sev p2">P2</td><td><strong>Dependency version ranges</strong> (<span class="mono">&gt;=</span>) not hash-pinned.</td><td>A bad future library update could slip in silently.</td><td>Move to a hash-pinned lockfile; keep Dependabot + pip-audit.</td></tr>
+        <tr><td class="sev p2">P2</td><td><strong>Dev key custody on disk</strong> (TODO(KMS)).</td><td>The signing keys live on the server disk — fine for synthetic data, not for production secrets.</td><td>Move to KMS/HSM + key rotation before real data.</td></tr>
+        <tr><td class="sev p2">P2</td><td><strong>No scheduled backups + tested restore; no uptime/error monitoring.</strong></td><td>If the server dies or data is lost, there's no safety net or alarm yet.</td><td>Scheduled Postgres backups (test a restore); uptime check + Sentry; status page.</td></tr>
+        <tr><td class="sev p2">P2</td><td><strong>No nightly self-verification.</strong></td><td>Nothing yet re-checks the whole chain automatically every night.</td><td>Cron job that replays recent traces and alerts on any failure (top of engineering queue).</td></tr>
+        <tr><td class="sev p2">P2</td><td><strong>CSP allows <span class="mono">unsafe-inline</span></strong>; console is one large inline script (duplicate-const bug hit twice).</td><td>The dashboard code is in one big file that's easy to break accidentally.</td><td>Tighten CSP with nonces; split the console into modules.</td></tr>
+        <tr><td class="sev p2">P2</td><td><strong>Regulation packs pre-counsel.</strong></td><td>The built-in law libraries aren't lawyer-verified yet.</td><td>Legal review → promote to a counsel-reviewed status (becomes a paid content line).</td></tr>
+        <tr><td class="sev p3">P3</td><td><strong>Demo/test orgs on prod; breached-password screening; MFA/SSO.</strong></td><td>Housekeeping and later-stage security niceties.</td><td>Clean up demo data; add HIBP check at password-set; MFA/SSO when procurement asks.</td></tr>
+      </tbody>
+    </table>
+    <div class="plain"><span class="lab">In plain English</span>
+      Two things must happen to go live (deploy + the AI key). A handful more must happen before a
+      real client sends real data — mostly lawyer paperwork and switching on email. The rest is
+      "make it robust for the long haul" and can be scheduled.</div>
+  </section>
+
+  <section id="next">
+    <p class="eyebrow">07 · What's next</p>
+    <h2>The sequenced plan</h2>
+    <ol class="plan">
+      <li><span class="pt">Deploy to production &amp; verify<span class="gate">go-live gate</span></span>
+        <span class="pd">Manual Deploy <span class="mono">77a3fcb</span> on Render; add
+        <span class="mono">ANTHROPIC_API_KEY</span>; run the dress rehearsal against the live URL
+        (expect 27/27); I create your real admin user. This unblocks everything.</span></li>
+      <li><span class="pt">Domain → email → real logins<span class="gate b">before real users</span></span>
+        <span class="pd">Buy the domain; create the Resend account and verify it; I wire email
+        sending and turn off dev mode. Also unlocks the contact form and the public URL.</span></li>
+      <li><span class="pt">Legal &amp; commercial groundwork<span class="gate b">before real data</span></span>
+        <span class="pd">UAE counsel for entity + privacy policy + DPA + pilot contract (liability
+        cap) + the Anthropic consent line; cyber/PI insurance. Highest-ROI non-code spend.</span></li>
+      <li><span class="pt">Send the TradeEasy package</span><span class="pd">Pilot guide, integration
+        guide, SDK wheel (0.2.0), API key separately — once the deploy is verified green.</span></li>
+      <li><span class="pt">Production-hardening engineering queue</span><span class="pd">In order:
+        nightly self-verification cron → KMS + key rotation → hash-pinned dependencies + pip-audit in
+        CI → scheduled backups + monitoring → console modularisation.</span></li>
+      <li><span class="pt">Strategic positioning (from the landscape research)</span><span class="pd">Stop
+        leading with the hash chain; lead on customer-key + external anchor (insider-proof) + UAE.
+        Align to the SCITT standard rather than a proprietary format. Teach "WORM ≠ externally
+        anchored." Make the tamper test a live sales demo.</span></li>
+      <li><span class="pt">Go-to-market motion</span><span class="pd">Apply to DIFC Innovation Hub /
+        Hub71 / a sandbox; formalise TradeEasy as a reference design-partner; run warm-intro outreach
+        from the prospect sheet (intros convert, cold email opens doors).</span></li>
+      <li><span class="pt">Second-market planning</span><span class="pd">Later: reduce
+        single-jurisdiction concentration (ADGM-then-GCC, or the EU AI Act Article 12 angle).</span></li>
+    </ol>
+    <div class="plain"><span class="lab">In plain English</span>
+      Next: press the deploy button and check it (go live). Then buy the domain so emails work. In
+      parallel, get the lawyer paperwork and insurance sorted before any real client data. Then send
+      TradeEasy their kit. After that, make it bulletproof and go sell — leaning on warm introductions
+      and the one thing competitors don't have.</div>
+  </section>
+
+  <section id="gloss">
+    <p class="eyebrow">08 · Glossary</p>
+    <h2>Jargon, decoded</h2>
+    <dl class="gloss">
+      <dt>Hash / hash-chain</dt><dd>A fingerprint of data; chaining each entry's fingerprint into the next means you can't change an old entry without breaking every one after it.</dd>
+      <dt>Ed25519 signature</dt><dd>A digital signature anyone can check with a public key but only we can produce — proof an entry is genuinely ours and untouched.</dd>
+      <dt>Merkle batch</dt><dd>A way to bundle many entries under one fingerprint so a whole batch can be proven at once.</dd>
+      <dt>RFC-3161 / external anchor</dt><dd>An independent, outside time-stamp service that "notarises" our records — so not even we can backdate or rewrite history.</dd>
+      <dt>Customer-key mode</dt><dd>The client encrypts content with a key only they hold; we store it but can't read it until they unlock a specific record.</dd>
+      <dt>The gate</dt><dd>The single function that checks, records, and seals an AI output. The whole integration.</dd>
+      <dt>Tier (green/yellow/orange/red)</dt><dd>The risk level of an output. Red is most serious; only the client's own rules can actually block.</dd>
+      <dt>Remediation</dt><dd>The suggested fix for a flagged output, plus proof the fix was itself checked and shipped.</dd>
+      <dt>Dress rehearsal</dt><dd>A one-command script that runs the whole customer journey on fake data and checks 27 things — our go/no-go test.</dd>
+      <dt>SCITT</dt><dd>An emerging industry standard for exactly this kind of signed, transparent, independently-verifiable record — worth aligning to.</dd>
+      <dt>KMS / HSM</dt><dd>Hardware-grade secure key storage; where our signing keys should live in production (currently on disk for testing).</dd>
+      <dt>DIFC Reg 10 / CBUAE guidance</dt><dd>The UAE rules that create demand: they require accountable, demonstrable records of what AI systems do.</dd>
+    </dl>
+  </section>
+
+  <footer>
+    Internal status &amp; roadmap for Attest, generated 2026-10-02 from the project's own commit
+    history, test results, and session record. Reflects commit 77a3fcb on branch
+    claude/zealous-archimedes-8i4x3i. Figures from the business/landscape documents are models and
+    research to validate, not guarantees; Attest proves records are unaltered and does not certify
+    that an output is lawful.
+  </footer>
+</div>
